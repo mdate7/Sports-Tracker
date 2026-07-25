@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Sports Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+
+    <header class="app-header">
+      <div>
+        <p class="eyebrow" id="view-label">All sports</p>
+        <h1 id="view-title">Your feed</h1>
+      </div>
+    </header>
+
+    <div id="match-list"></div>
+
+    <form id="match-form"></form>
+
+    <nav class="tab-bar" id="tab-bar">
+      <button class="tab-btn active" data-view="all">
+        <span class="tab-icon tab-icon-all">≡</span>
+        <span class="tab-label">All</span>
+      </button>
+      <button class="tab-btn" data-view="football">
+        <span class="tab-icon badge-football">F</span>
+        <span class="tab-label">Football</span>
+      </button>
+      <button class="tab-btn" data-view="cricket">
+        <span class="tab-icon badge-cricket">C</span>
+        <span class="tab-label">Cricket</span>
+      </button>
+      <button class="tab-btn" data-view="golf">
+        <span class="tab-icon badge-golf">G</span>
+        <span class="tab-label">Golf</span>
+      </button>
+      <button class="tab-btn" data-view="stats">
+        <span class="tab-icon tab-icon-stats">▲</span>
+        <span class="tab-label">Stats</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

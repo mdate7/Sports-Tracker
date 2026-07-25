@@ -1,0 +1,218 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, Arial, sans-serif;
+  background: #f4f3ef;
+  color: #1a1a1a;
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding-bottom: 76px; /* leaves room above the fixed bottom nav */
+}
+
+.app-header {
+  padding: 20px 20px 12px;
+}
+
+.eyebrow {
+  font-size: 12px;
+  color: #8a8a85;
+  margin: 0 0 2px;
+}
+
+.app-header h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+/* --- Match cards --- */
+
+#match-list {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.empty-state {
+  color: #8a8a85;
+  font-size: 14px;
+  padding: 24px 4px;
+  text-align: center;
+}
+
+.match-card {
+  background: white;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-opponent {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.card-date {
+  font-size: 12px;
+  color: #8a8a85;
+  margin: 0;
+}
+
+.card-badge {
+  font-size: 12px;
+  color: #444;
+  background: #f0efe9;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.card-summary {
+  display: flex;
+  gap: 14px;
+  list-style: none;
+  padding: 10px 0 0;
+  margin: 10px 0 0;
+  border-top: 1px solid #eeeeea;
+  font-size: 12.5px;
+  color: #555;
+}
+
+.card-details {
+  list-style: none;
+  padding: 10px 0 0;
+  margin: 10px 0 0;
+  border-top: 1px solid #eeeeea;
+  font-size: 12.5px;
+  color: #555;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.card-buttons button,
+.toggle-details-btn {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e0d8;
+  background: white;
+  color: #444;
+  cursor: pointer;
+}
+
+/* --- Sport badges (shared color language across nav + cards) --- */
+
+.badge-football { background: #e5f3e8; color: #1e7a3a; }
+.badge-cricket  { background: #e5eefb; color: #1a5fb4; }
+.badge-golf     { background: #f1e9fb; color: #6b3fb0; }
+
+.tab-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 auto;
+}
+
+.tab-icon-all,
+.tab-icon-stats {
+  background: transparent;
+  color: #8a8a85;
+  font-size: 16px;
+}
+
+/* --- Form --- */
+
+#match-form {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+#match-form input {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e0d8;
+  font-size: 14px;
+}
+
+#match-form button {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  background: #1a1a1a;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* --- Bottom tab bar --- */
+
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 1px solid #eceae2;
+  display: flex;
+  padding: 8px 0 10px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.tab-label {
+  font-size: 11px;
+  color: #8a8a85;
+}
+
+.tab-btn.active .tab-label {
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.tab-btn.active .tab-icon-all,
+.tab-btn.active .tab-icon-stats {
+  color: #1a1a1a;
+}
