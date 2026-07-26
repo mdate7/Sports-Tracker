@@ -127,18 +127,18 @@ body {
 
 /* --- Sport badges (shared color language across nav + cards) --- */
 
-.badge-football { background: #e5f3e8; color: #1e7a3a; }
-.badge-cricket  { background: #e5eefb; color: #1a5fb4; }
-.badge-golf     { background: #f1e9fb; color: #6b3fb0; }
+.badge-football { background: #e5f3e8; color: #91f4af; }
+.badge-cricket  { background: #e5eefb; color: #9bc3f4; }
+.badge-golf     { background: #f1e9fb; color: #c1a0f5; }
 
 .tab-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
   margin: 0 auto;
 }
@@ -153,7 +153,6 @@ body {
 /* --- Form --- */
 
 #match-form {
-  display: none;
   flex-direction: column;
   gap: 8px;
   padding: 0 16px 16px;
@@ -215,4 +214,15 @@ body {
 .tab-btn.active .tab-icon-all,
 .tab-btn.active .tab-icon-stats {
   color: #1a1a1a;
+}
+
+.add-match-btn {
+  margin: 0 16px 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #1a1a1a;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
 }

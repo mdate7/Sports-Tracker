@@ -18,6 +18,11 @@
 
     <div id="match-list"></div>
 
+    <button id="add-match-btn" class="add-match-btn">+ Add Match</button>
+    <button id="export-btn">Export Data</button>
+        <input type="file" id="import-input" accept=".json" style="display:none">
+    <button id="import-btn">Import Data</button>
+
     <form id="match-form"></form>
 
     <nav class="tab-bar" id="tab-bar">
@@ -26,15 +31,15 @@
         <span class="tab-label">All</span>
       </button>
       <button class="tab-btn" data-view="football">
-        <span class="tab-icon badge-football">F</span>
+        <span class="tab-icon badge-football">⚽</span>
         <span class="tab-label">Football</span>
       </button>
       <button class="tab-btn" data-view="cricket">
-        <span class="tab-icon badge-cricket">C</span>
+        <span class="tab-icon badge-cricket">🏏</span>
         <span class="tab-label">Cricket</span>
       </button>
       <button class="tab-btn" data-view="golf">
-        <span class="tab-icon badge-golf">G</span>
+        <span class="tab-icon badge-golf">⛳</span>
         <span class="tab-label">Golf</span>
       </button>
       <button class="tab-btn" data-view="stats">
