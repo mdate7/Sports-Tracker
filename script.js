@@ -142,6 +142,7 @@ function renderHoleStep() {
   if (holeIndex > 0) {
     document.getElementById("hole-back-btn").addEventListener("click", () => {
       saveCurrentHoleInputs();
+      saveRoundProgress();
       golfRound.holeIndex--;
       renderHoleStep();
     });
@@ -149,6 +150,7 @@ function renderHoleStep() {
 
   document.getElementById("hole-next-btn").addEventListener("click", () => {
     saveCurrentHoleInputs();
+    saveRoundProgress();
     if (holeIndex === numHoles - 1) {
       finishGolfRound();
     } else {
@@ -194,6 +196,7 @@ function finishGolfRound() {
     });
 
     localStorage.setItem("matches", JSON.stringify(matches));
+    clearRoundProgress();
     golfRound = null;
     renderView();
     form.style.display = "none";
@@ -349,9 +352,21 @@ addMatchBtn.addEventListener("click", () => {
     addMatchBtn.textContent = "+ Add Match";
     editingId = null;
     golfRound = null;
-  } else {
+   } else {
     if (currentView === "golf") {
-      buildGolfSetup();
+      const saved = localStorage.getItem("inProgressGolfRound");
+      if (saved) {
+        const resume = confirm("You have an unfinished round in progress. Resume it?");
+        if (resume) {
+          golfRound = JSON.parse(saved);
+          renderHoleStep();
+        } else {
+          clearRoundProgress();
+          buildGolfSetup();
+        }
+      } else {
+        buildGolfSetup();
+      }
     } else {
       buildForm(currentView);
     }
