@@ -1,52 +1,55 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>My Sports Tracker</title>
+  <title>The Clubhouse</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="Clubhouse-tokens.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="app">
 
     <header class="app-header">
-      <div>
         <p class="eyebrow" id="view-label">All sports</p>
-        <h1 id="view-title">Your feed</h1>
-      </div>
+        <h1 class="title" id="view-title">Your feed</h1>
     </header>
 
     <div id="match-list"></div>
 
-    <button id="add-match-btn" class="add-match-btn">+ Add Match</button>
-    <button id="export-btn">Export Data</button>
-        <input type="file" id="import-input" accept=".json" style="display:none">
-    <button id="import-btn">Import Data</button>
+<div class="action-row">
+  <button id="add-match-btn" class="btn">+ Log match</button>
+  <button id="export-btn" class="btn btn--ghost btn--sm">Export</button>
+  <input type="file" id="import-input" accept=".json" style="display:none">
+  <button id="import-btn" class="btn btn--ghost btn--sm">Import</button>
+</div>
 
     <form id="match-form"></form>
 
-    <nav class="tab-bar" id="tab-bar">
-      <button class="tab-btn active" data-view="all">
-        <span class="tab-icon tab-icon-all">≡</span>
-        <span class="tab-label">All</span>
-      </button>
-      <button class="tab-btn" data-view="football">
-        <span class="tab-icon badge-football">⚽</span>
-        <span class="tab-label">Football</span>
-      </button>
-      <button class="tab-btn" data-view="cricket">
-        <span class="tab-icon badge-cricket">🏏</span>
-        <span class="tab-label">Cricket</span>
-      </button>
-      <button class="tab-btn" data-view="golf">
-        <span class="tab-icon badge-golf">⛳</span>
-        <span class="tab-label">Golf</span>
-      </button>
-      <button class="tab-btn" data-view="stats">
-        <span class="tab-icon tab-icon-stats">▲</span>
-        <span class="tab-label">Stats</span>
-      </button>
-    </nav>
+<nav class="tab-bar" id="tab-bar">
+  <button class="tab-btn active" data-view="all">
+    <span class="tab-icon tab-icon-all">≡</span>
+    <span class="tab-label">All</span>
+  </button>
+  <button class="tab-btn" data-view="football" data-sport="football">
+    <span class="tab-icon">⚽</span>
+    <span class="tab-label">Football</span>
+  </button>
+  <button class="tab-btn" data-view="cricket" data-sport="cricket">
+    <span class="tab-icon">🏏</span>
+    <span class="tab-label">Cricket</span>
+  </button>
+  <button class="tab-btn" data-view="golf" data-sport="golf">
+    <span class="tab-icon">⛳</span>
+    <span class="tab-label">Golf</span>
+  </button>
+  <button class="tab-btn" data-view="stats">
+    <span class="tab-icon tab-icon-stats">▲</span>
+    <span class="tab-label">Stats</span>
+  </button>
+</nav>
 
   </div>
 

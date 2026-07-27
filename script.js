@@ -59,6 +59,28 @@ function getFieldsForSport(sport) {
   return [...commonFields, ...sportFields[sport]];
 }
 
+function getGolfScoreVsPar(match) {
+  const diff = match.strokes - match.par;
+  if (diff === 0) return "E";
+  return diff > 0 ? `+${diff}` : `${diff}`;
+}
+
+function getFootballResult(match) {
+  if (match.goalsFor > match.goalsAgainst) return "Win";
+  if (match.goalsFor < match.goalsAgainst) return "Loss";
+  return "Draw";
+}
+
+function getCalculatedSummary(match) {
+  if (match.sport === "golf") {
+    return `<li>Score: ${getGolfScoreVsPar(match)}</li>`;
+  }
+  if (match.sport === "football") {
+    return `<li>Result: ${getFootballResult(match)}</li>`;
+  }
+  return "";
+}
+
 function getCourseProfile(courseName) {
   const courses = JSON.parse(localStorage.getItem("courses")) || {};
   return courses[courseName] || null;
@@ -213,6 +235,7 @@ function renderMatch(match) {
   const detailFields = fields.filter(f => !f.summary);
 
   const summaryRows = summaryFields.map(f => `<li>${f.label}: ${match[f.key]}</li>`).join("");
+  const calculatedRow = getCalculatedSummary(match);
   const detailRows = detailFields.map(f => `<li>${f.label}: ${match[f.key]}</li>`).join("");
 
   card.innerHTML = `
@@ -226,8 +249,8 @@ function renderMatch(match) {
       </div>
       <span class="card-badge">${sportNames[match.sport]}</span>
     </div>
-    <ul class="card-summary">${summaryRows}</ul>
-    <ul class="card-details" style="display: none;">${detailRows}</ul>
+    <ul class="card-summary">${summaryRows}${calculatedRow}</ul>
+    <ul class="card-details">${detailRows}</ul>
     <div class="card-buttons">
       <button class="toggle-details-btn">View Details</button>
       <button class="edit-btn">Edit</button>
@@ -238,10 +261,9 @@ function renderMatch(match) {
   const toggleBtn = card.querySelector(".toggle-details-btn");
   const detailsList = card.querySelector(".card-details");
   toggleBtn.addEventListener("click", () => {
-    const isHidden = detailsList.style.display === "none";
-    detailsList.style.display = isHidden ? "flex" : "none";
-    toggleBtn.textContent = isHidden ? "Hide Details" : "View Details";
-  });
+    const isExpanded = detailsList.classList.toggle("expanded");
+    toggleBtn.textContent = isExpanded ? "Hide Details" : "View Details";
+});
 
   card.querySelector(".edit-btn").addEventListener("click", () => startEdit(match.id));
   card.querySelector(".delete-btn").addEventListener("click", () => deleteMatch(match.id));

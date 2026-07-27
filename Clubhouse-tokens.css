@@ -1,0 +1,348 @@
+/* ==========================================================================
+   Formline — design tokens & component recipes
+   Direction 1a "Floodlight". Dark-first: :root IS dark mode.
+   Plain CSS custom properties, no framework, no build step.
+   ========================================================================== */
+
+:root {
+  /* ---- surfaces (cool near-black) ---------------------------------------- */
+  --bg:            #0A0C0E;   /* app background */
+  --surface:       #14181B;   /* cards, fields */
+  --raised:        #1C2126;   /* steppers, inner controls, chips-on-card */
+  --line:          rgba(255, 255, 255, .07);
+  --line-strong:   rgba(255, 255, 255, .14);
+
+  /* ---- text -------------------------------------------------------------- */
+  --text:          #EDF1F3;
+  --muted:         #7C878E;   /* labels, secondary values */
+  --faint:         #5F6A71;   /* placeholders only — never for real content */
+  --on-accent:     #0A0C0E;   /* text on any accent fill */
+
+  /* ---- sport accents ----------------------------------------------------- *
+   * All share L .78–.87 and C .13–.19; only hue changes. To add a sport,
+   * add one line here and one --sport binding below. Nothing else changes.  */
+  --football:      oklch(0.87 0.19 128);   /* electric lime  */
+  --cricket:       oklch(0.78 0.16  58);   /* amber          */
+  --golf:          oklch(0.80 0.13 205);   /* cyan           */
+  --gym:           oklch(0.70 0.17 330);   /* magenta        */
+
+  --sport:         var(--football);        /* default binding, see [data-sport] */
+  --negative:      oklch(0.62 0.17  28);   /* loss, over par, regression */
+
+  /* ---- type -------------------------------------------------------------- */
+  --font-ui:       'Archivo', system-ui, -apple-system, sans-serif;
+  --font-data:     'JetBrains Mono', ui-monospace, Menlo, monospace;
+
+  --t-hero:        700 2.125rem/1 var(--font-ui);      /* 34px card hero number */
+  --t-hero-xl:     700 3.75rem/1 var(--font-ui);       /* 60px wizard / summary */
+  --t-title:       700 1.6875rem/1.1 var(--font-ui);   /* 27px screen title */
+  --t-card:        600 1.09375rem/1.25 var(--font-ui); /* 17.5px card title */
+  --t-body:        400 0.8125rem/1.55 var(--font-ui);  /* 13px */
+  --t-value:       600 0.9375rem var(--font-ui);       /* 15px stat value */
+  --t-btn:         700 0.9375rem var(--font-ui);       /* 15px button */
+  --t-label:       400 0.59375rem var(--font-data);    /* 9.5px stat label */
+  --t-eyebrow:     600 0.59375rem var(--font-data);    /* 9.5px sport eyebrow */
+
+  --track-tight:  -.025em;  /* titles */
+  --track-hero:   -.04em;   /* big numerals */
+  --track-label:   .14em;   /* uppercase mono labels */
+
+  /* ---- geometry ---------------------------------------------------------- */
+  --r-card:        18px;
+  --r-field:       12px;
+  --r-btn:         14px;
+  --r-chip:        99px;
+  --r-badge:       8px;
+
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 22px; --s-6: 32px; --s-7: 44px;
+
+  --gutter:        20px;    /* screen side padding */
+  --app-max:       480px;   /* single-column cap */
+  --tap-min:       44px;    /* never smaller, ever */
+
+  --ease:          cubic-bezier(.2, .7, .3, 1);
+  --dur:           180ms;
+}
+
+/* ---- light mode: the alternative, not the default ----------------------- */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:          #F4F5F3;
+    --surface:     #FFFFFF;
+    --raised:      #EDEFEC;
+    --line:        rgba(0, 0, 0, .09);
+    --line-strong: rgba(0, 0, 0, .18);
+    --text:        #14181B;
+    --muted:       #636E74;
+    --faint:       #97A0A5;
+    --on-accent:   #0A0C0E;
+    /* accents drop ~.12 lightness so they hold contrast on white */
+    --football:    oklch(0.72 0.19 128);
+    --cricket:     oklch(0.66 0.16  58);
+    --golf:        oklch(0.63 0.13 205);
+    --gym:         oklch(0.58 0.17 330);
+    --negative:    oklch(0.55 0.17  28);
+  }
+}
+[data-theme="light"] { color-scheme: light; }
+[data-theme="dark"]  { color-scheme: dark; }
+
+/* ---- sport binding: the ONLY per-sport styling in the system ------------ */
+[data-sport="football"] { --sport: var(--football); }
+[data-sport="cricket"]  { --sport: var(--cricket); }
+[data-sport="golf"]     { --sport: var(--golf); }
+[data-sport="gym"]      { --sport: var(--gym); }
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: var(--t-body);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  text-wrap: pretty;
+}
+
+.app {
+  max-width: var(--app-max);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+  padding-bottom: 96px;            /* clears the tab bar */
+}
+
+a { color: var(--sport); text-decoration: none; }
+a:hover { color: var(--text); }
+
+/* tabular figures everywhere a number can change length */
+.num { font-variant-numeric: tabular-nums; }
+
+/* ==========================================================================
+   Type helpers
+   ========================================================================== */
+
+.title    { font: var(--t-title); letter-spacing: var(--track-tight); margin: 0; }
+.card-title { font: var(--t-card); letter-spacing: -.015em; margin: 0; }
+
+/* uppercase mono label — used for every field label and stat caption */
+.label {
+  font: var(--t-label);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* sport eyebrow: dot + sport · context. Always accent-coloured. */
+.eyebrow {
+  display: flex; align-items: center; gap: 7px;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--sport);
+}
+.eyebrow::before {
+  content: ""; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--sport);
+}
+
+/* ==========================================================================
+   RULE 1 — computed values are loud, typed values are quiet.
+   .hero / .delta / .verdict are ONLY for values the app calculated.
+   .stat-value is ONLY for values the person typed.
+   ========================================================================== */
+
+.hero {
+  font: var(--t-hero);
+  letter-spacing: var(--track-hero);
+  font-variant-numeric: tabular-nums;
+}
+.hero--xl { font: var(--t-hero-xl); letter-spacing: -.05em; }
+.hero small { font-size: .45em; color: var(--muted); }   /* unit suffix: kg, yds */
+
+.delta {                                   /* +14, ↓3.1, SR 90.4, PB +2.5 */
+  font: 600 .75rem var(--font-data);
+  color: var(--sport);
+}
+.delta--neg { color: var(--negative); }
+
+.verdict {                                 /* WIN / LOSS / DRAW / PB */
+  padding: 5px 10px;
+  border-radius: var(--r-badge);
+  background: var(--sport);
+  color: var(--on-accent);
+  font: 700 .6875rem var(--font-ui);
+  letter-spacing: .06em;
+}
+.verdict--draw { background: rgba(237,241,243,.18); color: var(--text); }
+.verdict--loss { background: var(--negative); }
+
+/* a sentence of insight, in accent — max one per card */
+.insight { font: var(--t-body); color: var(--sport); margin: 0; }
+
+/* ==========================================================================
+   Card + stat row
+   ========================================================================== */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: var(--s-4) 17px;
+}
+.card + .card { margin-top: var(--s-3); }
+
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--s-3); }
+.card-meta { font: 400 .75rem var(--font-ui); color: var(--muted); margin-top: 3px; }
+
+/* typed values: neutral, tabular, 2–4 per card */
+.stats {
+  display: flex; gap: var(--s-5);
+  margin-top: 15px; padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+.stat-value { font: var(--t-value); font-variant-numeric: tabular-nums; }
+.stat-value + .label { margin-top: 3px; }
+
+/* form guide: five most recent results */
+.form-guide { display: flex; gap: 3px; }
+.form-guide span {
+  width: 14px; height: 14px; border-radius: 4px;
+  font: 700 .5rem/14px var(--font-ui); text-align: center;
+  background: rgba(237,241,243,.18); color: var(--text);
+}
+.form-guide .w { background: var(--sport); color: var(--on-accent); }
+.form-guide .l { background: var(--negative); color: var(--on-accent); }
+
+/* hole-by-hole / per-unit strip. Height encodes strokes, colour encodes
+   relation to par. Reusable for any per-unit breakdown (overs, sets, rounds). */
+.strip { display: flex; gap: 2px; align-items: flex-end; height: 34px; }
+.strip i { flex: 1; border-radius: 2px; background: rgba(237,241,243,.16); }
+.strip i[data-v="under"] { height: 35%;  background: var(--sport); }
+.strip i[data-v="par"]   { height: 60%; }
+.strip i[data-v="over"]  { height: 85%;  background: rgba(237,241,243,.32); }
+.strip i[data-v="worse"] { height: 100%; background: var(--negative); }
+
+/* ==========================================================================
+   Controls — nothing below --tap-min
+   ========================================================================== */
+
+.field {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-field);
+  padding: 11px 13px;
+  min-height: var(--tap-min);
+}
+.field input, .field select, .field textarea {
+  width: 100%; margin-top: 4px;
+  background: none; border: 0; padding: 0;
+  color: var(--text); font: 600 .90625rem var(--font-ui);
+}
+.field input::placeholder, .field textarea::placeholder { color: var(--faint); font-weight: 400; }
+.field:focus-within { border-color: var(--sport); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  padding: 8px 14px; min-height: 38px;
+  border-radius: var(--r-chip);
+  background: var(--surface); border: 1px solid var(--line-strong);
+  color: var(--muted);
+  font: 600 .78125rem var(--font-ui);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.chip[aria-pressed="true"] { background: var(--sport); color: var(--on-accent); border-color: transparent; }
+
+.stepper { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+.stepper button {
+  width: var(--tap-min); height: var(--tap-min); flex: none;
+  border: 1px solid var(--line-strong); border-radius: 50%;
+  background: var(--raised); color: var(--text);
+  font: 300 1.375rem/1 var(--font-ui);
+}
+.stepper button.plus { background: var(--sport); color: var(--on-accent); border-color: transparent; }
+.stepper output { font: 700 1.25rem var(--font-ui); font-variant-numeric: tabular-nums; }
+.stepper--lg button { width: 62px; height: 62px; font-size: 1.875rem; }
+.stepper--lg output { font: var(--t-hero-xl); letter-spacing: -.06em; }
+
+.btn {
+  display: block; width: 100%;
+  padding: 16px; border: 0;
+  border-radius: var(--r-btn);
+  background: var(--sport); color: var(--on-accent);
+  font: var(--t-btn); text-align: center;
+}
+.btn--neutral { background: var(--text); color: var(--bg); }
+.btn--ghost { background: var(--surface); color: var(--text); border: 1px solid var(--line-strong); }
+
+.toggle { width: 38px; height: 22px; border-radius: var(--r-chip); background: var(--raised); position: relative; flex: none; }
+.toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); transition: var(--dur) var(--ease); }
+.toggle[aria-checked="true"] { background: var(--sport); }
+.toggle[aria-checked="true"]::after { left: 18px; background: var(--bg); }
+
+/* ==========================================================================
+   Bottom tab bar — modes only. Sport is a filter, never a tab.
+   ========================================================================== */
+
+.tabs {
+  position: fixed; inset: auto 0 0 0;
+  max-width: var(--app-max); margin-inline: auto;
+  height: 76px; padding: var(--s-3) var(--s-3) 0;
+  display: flex; align-items: flex-start;
+  background: color-mix(in oklab, var(--bg) 86%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--line-strong);
+}
+.tabs a {
+  flex: 1; min-height: var(--tap-min);
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  font: 600 .59375rem var(--font-ui); color: var(--muted);
+}
+.tabs a[aria-current="page"] { color: var(--text); }
+.tabs .log {                                  /* centre action, overlaps the bar */
+  width: var(--tap-min); height: var(--tap-min);
+  margin-top: -16px; border-radius: 50%;
+  background: var(--football); color: var(--on-accent);
+  font: 400 1.625rem/42px var(--font-ui); text-align: center;
+}
+
+/* horizontal sport filter rail, top of Feed and Insights */
+.rail { display: flex; gap: 7px; overflow-x: auto; scrollbar-width: none; padding-bottom: var(--s-3); }
+.rail::-webkit-scrollbar { display: none; }
+.rail .chip { padding: 6px 12px; min-height: 32px; font-size: .6875rem; }
+.rail .chip[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+
+/* ==========================================================================
+   Wizard — one question per screen. Reuse for any multi-step flow.
+   ========================================================================== */
+
+.wizard { min-height: 100dvh; display: flex; flex-direction: column; }
+.wizard > .track { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; padding-inline: var(--gutter); }
+.wizard > footer { flex: none; padding: 18px var(--gutter) var(--s-5); border-top: 1px solid var(--line); }
+
+/* segmented progress: one segment per step, pinned under the header */
+.progress { display: flex; gap: 2px; padding: var(--s-4) var(--gutter) 0; }
+.progress i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,.13); }
+.progress i[data-done] { background: var(--sport); }
+.progress i[data-now]  { background: var(--text); }
+
+/* running derived total, always visible above the forward button */
+.running { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+.running b { font: var(--t-value); font-variant-numeric: tabular-nums; }
+
+/* the header says SAVED, not Cancel — every step persists on change */
+.saved { font: 600 .6875rem var(--font-data); letter-spacing: .06em; color: var(--sport); }
+
+/* ==========================================================================
+   Motion — transitions and easing only. No entrance animation on the feed.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: no-preference) {
+  .chip, .btn, .card, .toggle::after { transition: all var(--dur) var(--ease); }
+  .btn:active, .chip:active { transform: scale(.985); }
+}
