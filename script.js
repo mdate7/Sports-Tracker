@@ -71,16 +71,6 @@ function getFootballResult(match) {
   return "Draw";
 }
 
-function getCalculatedSummary(match) {
-  if (match.sport === "golf") {
-    return `<li>Score: ${getGolfScoreVsPar(match)}</li>`;
-  }
-  if (match.sport === "football") {
-    return `<li>Result: ${getFootballResult(match)}</li>`;
-  }
-  return "";
-}
-
 function getCourseProfile(courseName) {
   const courses = JSON.parse(localStorage.getItem("courses")) || {};
   return courses[courseName] || null;
@@ -225,34 +215,49 @@ function finishGolfRound() {
     addMatchBtn.textContent = "+ Add Match";
   });
 }
-
 function renderMatch(match) {
   const card = document.createElement("div");
-  card.className = "match-card";
+  card.className = "card";
+  card.dataset.sport = match.sport;
 
   const fields = getFieldsForSport(match.sport);
   const summaryFields = fields.filter(f => f.summary);
   const detailFields = fields.filter(f => !f.summary);
 
-  const summaryRows = summaryFields.map(f => `<li>${f.label}: ${match[f.key]}</li>`).join("");
-  const calculatedRow = getCalculatedSummary(match);
+  const statBlocks = summaryFields.map(f => `
+    <div>
+      <span class="stat-value num">${match[f.key]}</span>
+      <p class="label">${f.label}</p>
+    </div>
+  `).join("");
+
   const detailRows = detailFields.map(f => `<li>${f.label}: ${match[f.key]}</li>`).join("");
 
+  let hero = "";
+  if (match.sport === "football") {
+    const result = getFootballResult(match);
+    const cls = result === "Loss" ? "verdict--loss" : result === "Draw" ? "verdict--draw" : "";
+    hero = `<span class="verdict ${cls}">${result.toUpperCase()}</span>`;
+  } else if (match.sport === "golf") {
+    const diff = getGolfScoreVsPar(match);
+    const cls = match.strokes > match.par ? "delta--neg" : "";
+    hero = `<span class="delta num ${cls}">${diff}</span>`;
+  }
+
+  const title = match.opponent || match.courseName || "";
+
   card.innerHTML = `
-    <div class="card-top">
-      <div class="card-left">
-        <span class="tab-icon badge-${match.sport}">${sportIcons[match.sport]}</span>
-        <div>
-          <p class="card-opponent">${match.opponent || match.courseName || ""}</p>
-          <p class="card-date">${match.date || ""}</p>
-        </div>
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">${sportNames[match.sport]} · ${title}</p>
+        <p class="card-meta">${match.date || ""}</p>
       </div>
-      <span class="card-badge">${sportNames[match.sport]}</span>
+      ${hero}
     </div>
-    <ul class="card-summary">${summaryRows}${calculatedRow}</ul>
+    <div class="stats">${statBlocks}</div>
     <ul class="card-details">${detailRows}</ul>
-    <div class="card-buttons">
-      <button class="toggle-details-btn">View Details</button>
+    <div class="card-actions">
+      <button class="toggle-details-btn">View details</button>
       <button class="edit-btn">Edit</button>
       <button class="delete-btn">Delete</button>
     </div>
@@ -262,8 +267,8 @@ function renderMatch(match) {
   const detailsList = card.querySelector(".card-details");
   toggleBtn.addEventListener("click", () => {
     const isExpanded = detailsList.classList.toggle("expanded");
-    toggleBtn.textContent = isExpanded ? "Hide Details" : "View Details";
-});
+    toggleBtn.textContent = isExpanded ? "Hide details" : "View details";
+  });
 
   card.querySelector(".edit-btn").addEventListener("click", () => startEdit(match.id));
   card.querySelector(".delete-btn").addEventListener("click", () => deleteMatch(match.id));
