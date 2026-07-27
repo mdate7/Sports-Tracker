@@ -70,6 +70,14 @@ function saveCourseProfile(courseName, parPerHole) {
   localStorage.setItem("courses", JSON.stringify(courses));
 }
 
+function saveRoundProgress() {
+  localStorage.setItem("inProgressGolfRound", JSON.stringify(golfRound));
+}
+
+function clearRoundProgress() {
+  localStorage.removeItem("inProgressGolfRound");
+}
+
 function buildForm(sport, existingMatch = null) {
   form.innerHTML = "";
   getFieldsForSport(sport).forEach(field => {
@@ -112,6 +120,7 @@ function startGolfRound() {
   }
 
   golfRound = { courseName, numHoles, holes, holeIndex: 0 };
+  saveRoundProgress();
   renderHoleStep();
 }
 
