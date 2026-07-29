@@ -1,3 +1,98 @@
+const SUPABASE_URL = "https://saaiukdzwllatqtdqqhf.supabase.co";
+const SUPABASE_KEY = "sb_publishable_Lie3FVMBz9Y4Buwumkyn6g_Q0JSMj4s"; // paste your actual key
+
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+async function ensureSignedIn() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) return session.user.id;
+
+  const { data, error } = await supabaseClient.auth.signInAnonymously();
+  if (error) {
+    console.error("Anonymous sign-in failed:", error);
+    return null;
+  }
+  return data.user.id;
+}
+
+async function loadMatchesFromSupabase() {
+  const userId = await ensureSignedIn();
+  if (!userId) return [];
+
+  const { data, error } = await supabaseClient
+    .from("matches")
+    .select("*, football_details(*), cricket_details(*), golf_details(*), golf_holes(*)")
+    .eq("user_id", userId);
+
+  if (error) {
+    console.error("Failed to load matches:", error);
+    return [];
+  }
+
+  return data.map(flattenMatchRow);
+}
+
+function flattenMatchRow(row) {
+  const base = {
+    id: row.id,
+    sport: row.sport,
+    userId: row.user_id,
+    date: row.date,
+    matchRating: row.match_rating,
+    notes: row.notes
+  };
+
+  if (row.sport === "football" && row.football_details) {
+    const d = row.football_details;
+    return {
+      ...base,
+      opponent: d.opponent,
+      goalsFor: d.goals_for,
+      goalsAgainst: d.goals_against,
+      goals: d.goals,
+      assists: d.assists,
+      position: d.position,
+      minutesPlayed: d.minutes_played,
+      momVotes: d.mom_votes,
+      dodVotes: d.dod_votes
+    };
+  }
+
+  if (row.sport === "cricket" && row.cricket_details) {
+    const d = row.cricket_details;
+    return {
+      ...base,
+      opponent: d.opponent,
+      runsScored: d.runs_scored,
+      ballsFaced: d.balls_faced,
+      battingNumber: d.batting_number,
+      fours: d.fours,
+      sixes: d.sixes,
+      wicketsTaken: d.wickets_taken,
+      oversBowled: d.overs_bowled,
+      runsConceded: d.runs_conceded,
+      catches: d.catches
+    };
+  }
+
+  if (row.sport === "golf" && row.golf_details) {
+    const d = row.golf_details;
+    return {
+      ...base,
+      courseName: d.course_name,
+      playedWith: d.played_with,
+      strokes: d.strokes,
+      par: d.par,
+      holesPlayed: d.holes_played,
+      holes: (row.golf_holes || [])
+        .sort((a, b) => a.hole_number - b.hole_number)
+        .map(h => ({ par: h.par, strokes: h.strokes, putts: h.putts }))
+    };
+  }
+
+  return base;
+}
+
 const commonFields = [
   { key: "date", label: "Date", type: "date", summary: true },
   { key: "matchRating", label: "Match Rating", type: "number", summary: true },
@@ -49,7 +144,7 @@ const viewLabel = document.getElementById("view-label");
 const viewTitle = document.getElementById("view-title");
 
 let currentView = "all"; // "all" | "football" | "cricket" | "golf" | "stats"
-let matches = JSON.parse(localStorage.getItem("matches")) || [];
+let matches = [];
 let golfRound = null;
 // shape while in progress:
 // { courseName, numHoles, holes: [{par, strokes, putts}, ...], holeIndex }
@@ -57,6 +152,37 @@ let editingId = null;
 
 function getFieldsForSport(sport) {
   return [...commonFields, ...sportFields[sport]];
+}
+
+function buildDetailPayload(sport, values) {
+  if (sport === "football") {
+    return {
+      opponent: values.opponent,
+      goals_for: values.goalsFor,
+      goals_against: values.goalsAgainst,
+      goals: values.goals,
+      assists: values.assists,
+      position: values.position,
+      minutes_played: values.minutesPlayed,
+      mom_votes: values.momVotes,
+      dod_votes: values.dodVotes
+    };
+  }
+  if (sport === "cricket") {
+    return {
+      opponent: values.opponent,
+      runs_scored: values.runsScored,
+      balls_faced: values.ballsFaced,
+      batting_number: values.battingNumber,
+      fours: values.fours,
+      sixes: values.sixes,
+      wickets_taken: values.wicketsTaken,
+      overs_bowled: values.oversBowled,
+      runs_conceded: values.runsConceded,
+      catches: values.catches
+    };
+  }
+  return null; // golf is handled separately below, since it also needs golf_holes rows
 }
 
 function getGolfScoreVsPar(match) {
@@ -187,34 +313,69 @@ function finishGolfRound() {
     <button type="button" id="golf-save-btn">Save Round</button>
   `;
 
-  document.getElementById("golf-save-btn").addEventListener("click", () => {
-    const totalStrokes = golfRound.holes.reduce((sum, h) => sum + (h.strokes || 0), 0);
-    const totalPar = golfRound.holes.reduce((sum, h) => sum + (h.par || 0), 0);
-    const parPerHole = golfRound.holes.map(h => h.par);
+document.getElementById("golf-save-btn").addEventListener("click", async () => {
+  const totalStrokes = golfRound.holes.reduce((sum, h) => sum + (h.strokes || 0), 0);
+  const totalPar = golfRound.holes.reduce((sum, h) => sum + (h.par || 0), 0);
+  const parPerHole = golfRound.holes.map(h => h.par);
 
-    saveCourseProfile(golfRound.courseName, parPerHole);
+  saveCourseProfile(golfRound.courseName, parPerHole); // still local — flagged as a backlog item
 
-    matches.push({
-      id: Date.now(),
+  const userId = await ensureSignedIn();
+  if (!userId) {
+    alert("Couldn't verify your session — try again.");
+    return;
+  }
+
+  const { data: matchRow, error: matchError } = await supabaseClient
+    .from("matches")
+    .insert({
+      user_id: userId,
       sport: "golf",
-      userId: CURRENT_USER_ID,
-      courseName: golfRound.courseName,
-      holes: golfRound.holes,
+      date: document.getElementById("golf-date").value,
+      match_rating: Number(document.getElementById("golf-rating").value),
+      notes: document.getElementById("golf-notes").value || null
+    })
+    .select()
+    .single();
+
+  if (matchError) {
+    console.error("Failed to save round:", matchError);
+    alert("Something went wrong saving this round — check the console.");
+    return;
+  }
+
+  const { error: detailError } = await supabaseClient
+    .from("golf_details")
+    .insert({
+      match_id: matchRow.id,
+      course_name: golfRound.courseName,
+      played_with: null,
       strokes: totalStrokes,
       par: totalPar,
-      date: document.getElementById("golf-date").value,
-      matchRating: Number(document.getElementById("golf-rating").value),
-      notes: document.getElementById("golf-notes").value
+      holes_played: golfRound.numHoles
     });
+  if (detailError) console.error("Failed to save golf details:", detailError);
 
-    localStorage.setItem("matches", JSON.stringify(matches));
-    clearRoundProgress();
-    golfRound = null;
-    renderView();
-    form.style.display = "none";
-    addMatchBtn.textContent = "+ Add Match";
-  });
+  const holeRows = golfRound.holes.map((h, i) => ({
+    match_id: matchRow.id,
+    hole_number: i + 1,
+    par: h.par,
+    strokes: h.strokes,
+    putts: h.putts || null
+  }));
+
+  const { error: holesError } = await supabaseClient.from("golf_holes").insert(holeRows);
+  if (holesError) console.error("Failed to save hole-by-hole data:", holesError);
+
+  clearRoundProgress();
+  golfRound = null;
+  matches = await loadMatchesFromSupabase();
+  renderView();
+  form.style.display = "none";
+  addMatchBtn.textContent = "+ Add Match";
+});
 }
+
 function renderMatch(match) {
   const card = document.createElement("div");
   card.className = "card";
@@ -325,14 +486,20 @@ function startEdit(id) {
   addMatchBtn.textContent = "Cancel";
 }
 
-function deleteMatch(id) {
+async function deleteMatch(id) {
   const match = matches.find(m => m.id === id);
   const label = match.opponent || match.courseName || "this match";
   const confirmed = confirm(`Delete ${label}? This can't be undone.`);
   if (!confirmed) return;
 
-  matches = matches.filter(m => m.id !== id);
-  localStorage.setItem("matches", JSON.stringify(matches));
+  const { error } = await supabaseClient.from("matches").delete().eq("id", id);
+  if (error) {
+    console.error("Failed to delete match:", error);
+    alert("Something went wrong deleting this match — check the console.");
+    return;
+  }
+
+  matches = await loadMatchesFromSupabase();
   renderView();
 }
 
@@ -402,7 +569,7 @@ addMatchBtn.addEventListener("click", () => {
   }
 });
 
-form.addEventListener("submit", function (event) {
+form.addEventListener("submit", async function (event) {
   event.preventDefault();
 
   const sport = currentView;
@@ -413,15 +580,53 @@ form.addEventListener("submit", function (event) {
     values[field.key] = field.type === "number" ? Number(inputEl.value) : inputEl.value;
   });
 
-  if (editingId !== null) {
-    const index = matches.findIndex(m => m.id === editingId);
-    matches[index] = { ...matches[index], ...values };
-    editingId = null;
-  } else {
-    matches.push({ id: Date.now(), sport, userId: CURRENT_USER_ID, ...values });
+  const userId = await ensureSignedIn();
+  if (!userId) {
+    alert("Couldn't verify your session — try refreshing and saving again.");
+    return;
   }
 
-  localStorage.setItem("matches", JSON.stringify(matches));
+  if (editingId !== null) {
+    const { error: matchError } = await supabaseClient
+      .from("matches")
+      .update({ date: values.date, match_rating: values.matchRating, notes: values.notes || null })
+      .eq("id", editingId);
+
+    if (matchError) {
+      console.error("Failed to update match:", matchError);
+      alert("Something went wrong updating this match — check the console.");
+      return;
+    }
+
+    const { error: detailError } = await supabaseClient
+      .from(`${sport}_details`)
+      .update(buildDetailPayload(sport, values))
+      .eq("match_id", editingId);
+
+    if (detailError) console.error("Failed to update match details:", detailError);
+    editingId = null;
+
+  } else {
+    const { data: matchRow, error: matchError } = await supabaseClient
+      .from("matches")
+      .insert({ user_id: userId, sport, date: values.date, match_rating: values.matchRating, notes: values.notes || null })
+      .select()
+      .single();
+
+    if (matchError) {
+      console.error("Failed to save match:", matchError);
+      alert("Something went wrong saving this match — check the console.");
+      return;
+    }
+
+    const { error: detailError } = await supabaseClient
+      .from(`${sport}_details`)
+      .insert({ match_id: matchRow.id, ...buildDetailPayload(sport, values) });
+
+    if (detailError) console.error("Failed to save match details:", detailError);
+  }
+
+  matches = await loadMatchesFromSupabase();
   renderView();
   form.reset();
   form.style.display = "none";
@@ -436,4 +641,8 @@ document.getElementById("import-input").addEventListener("change", (e) => {
   if (e.target.files[0]) importMatches(e.target.files[0]);
 });
 
-setView("all");
+async function init() {
+  matches = await loadMatchesFromSupabase();
+  setView("all");
+}
+init();
