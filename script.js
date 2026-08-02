@@ -154,6 +154,42 @@ function getFieldsForSport(sport) {
   return [...commonFields, ...sportFields[sport]];
 }
 
+function openSportForm(sport) {
+  if (sport === "golf") {
+    const saved = localStorage.getItem("inProgressGolfRound");
+    if (saved) {
+      const resume = confirm("You have an unfinished round in progress. Resume it?");
+      if (resume) {
+        golfRound = JSON.parse(saved);
+        renderHoleStep();
+      } else {
+        clearRoundProgress();
+        buildGolfSetup();
+      }
+    } else {
+      buildGolfSetup();
+    }
+  } else {
+    buildForm(sport);
+  }
+  form.style.display = "flex";
+}
+
+function buildSportPicker() {
+  form.innerHTML = `
+    <p style="font-size:13px;color:var(--muted);">Which sport?</p>
+    <button type="button" class="btn" data-pick-sport="football">⚽ Football</button>
+    <button type="button" class="btn btn--ghost" data-pick-sport="cricket">🏏 Cricket</button>
+    <button type="button" class="btn btn--ghost" data-pick-sport="golf">⛳ Golf</button>
+  `;
+  form.querySelectorAll("[data-pick-sport]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      setView(btn.dataset.pickSport);
+      openSportForm(currentView);
+    });
+  });
+}
+
 function buildDetailPayload(sport, values) {
   if (sport === "football") {
     return {
@@ -601,28 +637,11 @@ addMatchBtn.addEventListener("click", () => {
   if (currentMode !== "feed") setMode("feed");
 
   if (currentView === "all") {
-    alert("Pick a sport from the rail first, then tap + to log a match.");
-    return;
-  }
-
-  if (currentView === "golf") {
-    const saved = localStorage.getItem("inProgressGolfRound");
-    if (saved) {
-      const resume = confirm("You have an unfinished round in progress. Resume it?");
-      if (resume) {
-        golfRound = JSON.parse(saved);
-        renderHoleStep();
-      } else {
-        clearRoundProgress();
-        buildGolfSetup();
-      }
-    } else {
-      buildGolfSetup();
-    }
+    buildSportPicker();
+    form.style.display = "flex";
   } else {
-    buildForm(currentView);
+    openSportForm(currentView);
   }
-  form.style.display = "flex";
 });
 
 form.addEventListener("submit", async function (event) {
