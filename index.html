@@ -17,10 +17,18 @@
         <h1 class="title" id="view-title">Your feed</h1>
     </header>
 
+<div class="rail" id="sport-rail">
+  <button class="chip" data-sport-filter="all" aria-pressed="true">All</button>
+  <button class="chip" data-sport-filter="football" data-sport="football" aria-pressed="false">Football</button>
+  <button class="chip" data-sport-filter="cricket" data-sport="cricket" aria-pressed="false">Cricket</button>
+  <button class="chip" data-sport-filter="golf" data-sport="golf" aria-pressed="false">Golf</button>
+</div>
+
+<div id="match-list"></div>
+
     <div id="match-list"></div>
 
 <div class="action-row">
-  <button id="add-match-btn" class="btn">+ Log match</button>
   <button id="export-btn" class="btn btn--ghost btn--sm">Export</button>
   <input type="file" id="import-input" accept=".json" style="display:none">
   <button id="import-btn" class="btn btn--ghost btn--sm">Import</button>
@@ -28,27 +36,12 @@
 
     <form id="match-form"></form>
 
-<nav class="tab-bar" id="tab-bar">
-  <button class="tab-btn active" data-view="all">
-    <span class="tab-icon tab-icon-all">≡</span>
-    <span class="tab-label">All</span>
-  </button>
-  <button class="tab-btn" data-view="football" data-sport="football">
-    <span class="tab-icon">⚽</span>
-    <span class="tab-label">Football</span>
-  </button>
-  <button class="tab-btn" data-view="cricket" data-sport="cricket">
-    <span class="tab-icon">🏏</span>
-    <span class="tab-label">Cricket</span>
-  </button>
-  <button class="tab-btn" data-view="golf" data-sport="golf">
-    <span class="tab-icon">⛳</span>
-    <span class="tab-label">Golf</span>
-  </button>
-  <button class="tab-btn" data-view="stats">
-    <span class="tab-icon tab-icon-stats">▲</span>
-    <span class="tab-label">Stats</span>
-  </button>
+<nav class="tabs" id="tab-bar">
+  <a href="#" class="tab-btn" data-mode="feed" aria-current="page">Feed</a>
+  <a href="#" class="tab-btn" data-mode="insights">Insights</a>
+  <button class="log" id="add-match-btn" aria-label="Log a match">+</button>
+  <a href="#" class="tab-btn" data-mode="teams">Teams</a>
+  <a href="#" class="tab-btn" data-mode="me">Me</a>
 </nav>
 
   </div>

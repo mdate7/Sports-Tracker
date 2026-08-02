@@ -133,7 +133,6 @@ const sportFields = {
 };
 
 const sportNames = { football: "Football", cricket: "Cricket", golf: "Golf" };
-const sportIcons = { football: "⚽", cricket: "🏏", golf: "⛳" };
 const CURRENT_USER_ID = "me";
 
 const tabBar = document.getElementById("tab-bar");
@@ -143,7 +142,8 @@ const matchList = document.getElementById("match-list");
 const viewLabel = document.getElementById("view-label");
 const viewTitle = document.getElementById("view-title");
 
-let currentView = "all"; // "all" | "football" | "cricket" | "golf" | "stats"
+let currentMode = "feed"; // "feed" | "insights" | "teams" | "me"
+let currentView = "all";  // sport filter, only meaningful while currentMode === "feed"
 let matches = [];
 let golfRound = null;
 // shape while in progress:
@@ -197,15 +197,36 @@ function getFootballResult(match) {
   return "Draw";
 }
 
-function getCourseProfile(courseName) {
-  const courses = JSON.parse(localStorage.getItem("courses")) || {};
-  return courses[courseName] || null;
+async function getCourseProfile(courseName) {
+  const userId = await ensureSignedIn();
+  if (!userId) return null;
+
+  const { data, error } = await supabaseClient
+    .from("courses")
+    .select("par_per_hole")
+    .eq("user_id", userId)
+    .eq("course_name", courseName)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Failed to look up course:", error);
+    return null;
+  }
+  return data ? { parPerHole: data.par_per_hole } : null;
 }
 
-function saveCourseProfile(courseName, parPerHole) {
-  const courses = JSON.parse(localStorage.getItem("courses")) || {};
-  courses[courseName] = { parPerHole };
-  localStorage.setItem("courses", JSON.stringify(courses));
+async function saveCourseProfile(courseName, parPerHole) {
+  const userId = await ensureSignedIn();
+  if (!userId) return;
+
+  const { error } = await supabaseClient
+    .from("courses")
+    .upsert(
+      { user_id: userId, course_name: courseName, par_per_hole: parPerHole },
+      { onConflict: "user_id,course_name" }
+    );
+
+  if (error) console.error("Failed to save course profile:", error);
 }
 
 function saveRoundProgress() {
@@ -242,12 +263,12 @@ function buildGolfSetup() {
   document.getElementById("golf-start-btn").addEventListener("click", startGolfRound);
 }
 
-function startGolfRound() {
+async function startGolfRound() {
   const courseName = document.getElementById("golf-course-name").value.trim();
   const numHoles = Number(document.getElementById("golf-num-holes").value);
   if (!courseName || !numHoles) return;
 
-  const profile = getCourseProfile(courseName);
+  const profile = await getCourseProfile(courseName);
   const holes = [];
   for (let i = 0; i < numHoles; i++) {
     holes.push({
@@ -309,6 +330,7 @@ function finishGolfRound() {
   form.innerHTML = `
     <input type="date" id="golf-date" required>
     <input type="number" id="golf-rating" placeholder="Match Rating" required>
+    <input type="text" id="golf-played-with" placeholder="Played With (optional)">
     <input type="text" id="golf-notes" placeholder="Notes (optional)">
     <button type="button" id="golf-save-btn">Save Round</button>
   `;
@@ -318,7 +340,7 @@ document.getElementById("golf-save-btn").addEventListener("click", async () => {
   const totalPar = golfRound.holes.reduce((sum, h) => sum + (h.par || 0), 0);
   const parPerHole = golfRound.holes.map(h => h.par);
 
-  saveCourseProfile(golfRound.courseName, parPerHole); // still local — flagged as a backlog item
+await saveCourseProfile(golfRound.courseName, parPerHole);
 
   const userId = await ensureSignedIn();
   if (!userId) {
@@ -349,7 +371,7 @@ document.getElementById("golf-save-btn").addEventListener("click", async () => {
     .insert({
       match_id: matchRow.id,
       course_name: golfRound.courseName,
-      played_with: null,
+      played_with: document.getElementById("golf-played-with").value || null,
       strokes: totalStrokes,
       par: totalPar,
       holes_played: golfRound.numHoles
@@ -372,7 +394,6 @@ document.getElementById("golf-save-btn").addEventListener("click", async () => {
   matches = await loadMatchesFromSupabase();
   renderView();
   form.style.display = "none";
-  addMatchBtn.textContent = "+ Add Match";
 });
 }
 
@@ -448,31 +469,53 @@ const sorted = [...list].sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
 function renderView() {
-  form.style.display = "none"; // always start hidden when switching views
+  form.style.display = "none";
 
+  if (currentMode === "insights") {
+    viewLabel.textContent = "Insights";
+    viewTitle.textContent = "Coming soon";
+    matchList.innerHTML = `<p class="empty-state">Stats and graphs are coming in a future stage.</p>`;
+    return;
+  }
+  if (currentMode === "teams") {
+    viewLabel.textContent = "Teams";
+    viewTitle.textContent = "Coming soon";
+    matchList.innerHTML = `<p class="empty-state">Team view is coming in a future stage.</p>`;
+    return;
+  }
+  if (currentMode === "me") {
+    viewLabel.textContent = "Me";
+    viewTitle.textContent = "Coming soon";
+    matchList.innerHTML = `<p class="empty-state">Your profile is coming in a future stage.</p>`;
+    return;
+  }
+
+  // currentMode === "feed"
   if (currentView === "all") {
     viewLabel.textContent = "All sports";
     viewTitle.textContent = "Your feed";
-    addMatchBtn.style.display = "none";
     renderList(matches);
-  } else if (currentView === "stats") {
-    viewLabel.textContent = "Stats";
-    viewTitle.textContent = "Coming soon";
-    addMatchBtn.style.display = "none";
-    matchList.innerHTML = `<p class="empty-state">Stats and graphs are coming in a future stage.</p>`;
   } else {
     viewLabel.textContent = sportNames[currentView];
     viewTitle.textContent = "Your feed";
-    addMatchBtn.style.display = "block";
-    addMatchBtn.textContent = "+ Add Match";
     renderList(matches.filter(m => m.sport === currentView));
   }
 }
 
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll(".tabs a").forEach(link => {
+    if (link.dataset.mode === mode) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+  sportRail.style.display = mode === "feed" ? "flex" : "none";
+  renderView();
+}
+
 function setView(view) {
   currentView = view;
-  document.querySelectorAll(".tab-btn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.view === view);
+  document.querySelectorAll("#sport-rail .chip").forEach(chip => {
+    chip.setAttribute("aria-pressed", chip.dataset.sportFilter === view ? "true" : "false");
   });
   renderView();
 }
@@ -483,7 +526,6 @@ function startEdit(id) {
   setView(match.sport);
   buildForm(match.sport, match);
   form.style.display = "flex";
-  addMatchBtn.textContent = "Cancel";
 }
 
 async function deleteMatch(id) {
@@ -530,43 +572,57 @@ function importMatches(file) {
   reader.readAsText(file);
 }
 
-
+const sportRail = document.getElementById("sport-rail");
 
 tabBar.addEventListener("click", (event) => {
-  const btn = event.target.closest(".tab-btn");
-  if (!btn) return;
+  const link = event.target.closest("a[data-mode]");
+  if (!link) return;
+  event.preventDefault();
   if (editingId !== null) return;
-  setView(btn.dataset.view);
+  setMode(link.dataset.mode);
+});
+
+sportRail.addEventListener("click", (event) => {
+  const chip = event.target.closest(".chip");
+  if (!chip) return;
+  if (editingId !== null) return;
+  setView(chip.dataset.sportFilter);
 });
 
 addMatchBtn.addEventListener("click", () => {
   const isOpen = form.style.display === "flex";
   if (isOpen) {
     form.style.display = "none";
-    addMatchBtn.textContent = "+ Add Match";
     editingId = null;
     golfRound = null;
-   } else {
-    if (currentView === "golf") {
-      const saved = localStorage.getItem("inProgressGolfRound");
-      if (saved) {
-        const resume = confirm("You have an unfinished round in progress. Resume it?");
-        if (resume) {
-          golfRound = JSON.parse(saved);
-          renderHoleStep();
-        } else {
-          clearRoundProgress();
-          buildGolfSetup();
-        }
+    return;
+  }
+
+  if (currentMode !== "feed") setMode("feed");
+
+  if (currentView === "all") {
+    alert("Pick a sport from the rail first, then tap + to log a match.");
+    return;
+  }
+
+  if (currentView === "golf") {
+    const saved = localStorage.getItem("inProgressGolfRound");
+    if (saved) {
+      const resume = confirm("You have an unfinished round in progress. Resume it?");
+      if (resume) {
+        golfRound = JSON.parse(saved);
+        renderHoleStep();
       } else {
+        clearRoundProgress();
         buildGolfSetup();
       }
     } else {
-      buildForm(currentView);
+      buildGolfSetup();
     }
-    form.style.display = "flex";
-    addMatchBtn.textContent = "Cancel";
+  } else {
+    buildForm(currentView);
   }
+  form.style.display = "flex";
 });
 
 form.addEventListener("submit", async function (event) {
@@ -630,7 +686,6 @@ form.addEventListener("submit", async function (event) {
   renderView();
   form.reset();
   form.style.display = "none";
-  addMatchBtn.textContent = "+ Add Match";
 });
 
 document.getElementById("export-btn").addEventListener("click", exportMatches);
@@ -643,6 +698,6 @@ document.getElementById("import-input").addEventListener("change", (e) => {
 
 async function init() {
   matches = await loadMatchesFromSupabase();
-  setView("all");
+  setMode("feed");
 }
 init();
