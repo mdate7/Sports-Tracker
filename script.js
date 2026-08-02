@@ -276,25 +276,43 @@ function clearRoundProgress() {
 function buildForm(sport, existingMatch = null) {
   form.innerHTML = "";
   getFieldsForSport(sport).forEach(field => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "field";
+
+    const label = document.createElement("label");
+    label.className = "label";
+    label.textContent = field.summary ? field.label : `${field.label} (optional)`;
+    label.setAttribute("for", field.key);
+
     const input = document.createElement("input");
     input.type = field.type;
     input.id = field.key;
-    input.placeholder = field.summary ? field.label : `${field.label} (optional)`;
     input.required = !!field.summary;
     if (existingMatch) input.value = existingMatch[field.key] ?? "";
-    form.appendChild(input);
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(input);
+    form.appendChild(wrapper);
   });
+
   const button = document.createElement("button");
   button.type = "submit";
+  button.className = "btn";
   button.textContent = existingMatch ? "Save Changes" : "Add Match";
   form.appendChild(button);
 }
 
 function buildGolfSetup() {
   form.innerHTML = `
-    <input type="text" id="golf-course-name" placeholder="Course Name" required>
-    <input type="number" id="golf-num-holes" placeholder="Number of Holes" value="18" required>
-    <button type="button" id="golf-start-btn">Start Round</button>
+    <div class="field">
+      <label class="label" for="golf-course-name">Course Name</label>
+      <input type="text" id="golf-course-name" required>
+    </div>
+    <div class="field">
+      <label class="label" for="golf-num-holes">Number of Holes</label>
+      <input type="number" id="golf-num-holes" value="18" required>
+    </div>
+    <button type="button" id="golf-start-btn" class="btn">Start Round</button>
   `;
   document.getElementById("golf-start-btn").addEventListener("click", startGolfRound);
 }
@@ -323,16 +341,25 @@ function renderHoleStep() {
   const { holeIndex, numHoles, holes } = golfRound;
   const hole = holes[holeIndex];
 
-  form.innerHTML = `
-    <p style="font-size:13px;color:#8a8a85;">Hole ${holeIndex + 1} of ${numHoles}</p>
-    <input type="number" id="hole-par" placeholder="Par" value="${hole.par}">
-    <input type="number" id="hole-strokes" placeholder="Strokes" value="${hole.strokes}" required>
-    <input type="number" id="hole-putts" placeholder="Putts (optional)" value="${hole.putts}">
-    <div style="display:flex; gap:8px;">
-      ${holeIndex > 0 ? `<button type="button" id="hole-back-btn">Back</button>` : ""}
-      <button type="button" id="hole-next-btn">${holeIndex === numHoles - 1 ? "Finish Round" : "Next Hole"}</button>
-    </div>
-  `;
+form.innerHTML = `
+  <p style="font-size:13px;color:var(--muted);">Hole ${holeIndex + 1} of ${numHoles}</p>
+  <div class="field">
+    <label class="label" for="hole-par">Par</label>
+    <input type="number" id="hole-par" value="${hole.par}">
+  </div>
+  <div class="field">
+    <label class="label" for="hole-strokes">Strokes</label>
+    <input type="number" id="hole-strokes" value="${hole.strokes}" required>
+  </div>
+  <div class="field">
+    <label class="label" for="hole-putts">Putts (optional)</label>
+    <input type="number" id="hole-putts" value="${hole.putts}">
+  </div>
+  <div style="display:flex; gap:8px;">
+    ${holeIndex > 0 ? `<button type="button" id="hole-back-btn" class="btn btn--ghost">Back</button>` : ""}
+    <button type="button" id="hole-next-btn" class="btn">${holeIndex === numHoles - 1 ? "Finish Round" : "Next Hole"}</button>
+  </div>
+`;
 
   if (holeIndex > 0) {
     document.getElementById("hole-back-btn").addEventListener("click", () => {
