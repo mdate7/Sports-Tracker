@@ -3,6 +3,12 @@ const SUPABASE_KEY = "sb_publishable_Lie3FVMBz9Y4Buwumkyn6g_Q0JSMj4s"; // paste 
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(err => console.error("Service worker registration failed:", err));
+  });
+}
+
 async function ensureSignedIn() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) return session.user.id;
@@ -390,13 +396,25 @@ function saveCurrentHoleInputs() {
 }
 
 function finishGolfRound() {
-  form.innerHTML = `
+form.innerHTML = `
+  <div class="field">
+    <label class="label" for="golf-date">Date</label>
     <input type="date" id="golf-date" required>
-    <input type="number" id="golf-rating" placeholder="Match Rating" required>
-    <input type="text" id="golf-played-with" placeholder="Played With (optional)">
-    <input type="text" id="golf-notes" placeholder="Notes (optional)">
-    <button type="button" id="golf-save-btn">Save Round</button>
-  `;
+  </div>
+  <div class="field">
+    <label class="label" for="golf-rating">Match Rating</label>
+    <input type="number" id="golf-rating" required>
+  </div>
+  <div class="field">
+    <label class="label" for="golf-played-with">Played With (optional)</label>
+    <input type="text" id="golf-played-with">
+  </div>
+  <div class="field">
+    <label class="label" for="golf-notes">Notes (optional)</label>
+    <input type="text" id="golf-notes">
+  </div>
+  <button type="button" id="golf-save-btn" class="btn">Save Round</button>
+`;
 
 document.getElementById("golf-save-btn").addEventListener("click", async () => {
   const totalStrokes = golfRound.holes.reduce((sum, h) => sum + (h.strokes || 0), 0);
