@@ -11,14 +11,7 @@ if ("serviceWorker" in navigator) {
 
 async function ensureSignedIn() {
   const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session) return session.user.id;
-
-  const { data, error } = await supabaseClient.auth.signInAnonymously();
-  if (error) {
-    console.error("Anonymous sign-in failed:", error);
-    return null;
-  }
-  return data.user.id;
+  return session ? session.user.id : null;
 }
 
 async function loadMatchesFromSupabase() {
@@ -760,8 +753,45 @@ document.getElementById("import-input").addEventListener("change", (e) => {
   if (e.target.files[0]) importMatches(e.target.files[0]);
 });
 
-async function init() {
+function showAuthScreen() {
+  document.getElementById("auth-screen").style.display = "flex";
+  document.querySelector(".app").style.display = "none";
+}
+
+async function showApp() {
+  document.getElementById("auth-screen").style.display = "none";
+  document.querySelector(".app").style.display = "block";
   matches = await loadMatchesFromSupabase();
   setMode("feed");
+}
+
+document.getElementById("auth-send-btn").addEventListener("click", async () => {
+  const email = document.getElementById("auth-email").value.trim();
+  const statusEl = document.getElementById("auth-status");
+  if (!email) return;
+
+  statusEl.textContent = "Sending...";
+  const { error } = await supabaseClient.auth.signInWithOtp({ email });
+
+  if (error) {
+    console.error("Failed to send magic link:", error);
+    statusEl.textContent = "Something went wrong — try again.";
+    return;
+  }
+  statusEl.textContent = "Check your email for the link. It'll open right back here.";
+});
+
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  if (event === "SIGNED_IN" && session) showApp();
+  if (event === "SIGNED_OUT") showAuthScreen();
+});
+
+async function init() {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) {
+    showApp();
+  } else {
+    showAuthScreen();
+  }
 }
 init();

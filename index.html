@@ -15,7 +15,21 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="app">
+
+<div id="auth-screen" class="wizard" style="display:none;">
+  <div class="track">
+    <p class="label">Sign in</p>
+    <h1 class="title">Welcome to The Clubhouse</h1>
+    <div class="field">
+      <label class="label" for="auth-email">Email</label>
+      <input type="email" id="auth-email" placeholder="you@example.com">
+    </div>
+    <button type="button" id="auth-send-btn" class="btn">Send magic link</button>
+    <p id="auth-status" class="tiny" style="color:var(--muted);margin-top:12px;"></p>
+  </div>
+</div>
+
+<div class="app">
 
     <header class="app-header">
         <p class="eyebrow" id="view-label">All sports</p>
