@@ -796,7 +796,6 @@ document.getElementById("auth-verify-btn").addEventListener("click", async () =>
     statusEl.textContent = "That code didn't work — check it and try again.";
     return;
   }
-  // onAuthStateChange's SIGNED_IN listener handles showing the app from here
 });
 
 supabaseClient.auth.onAuthStateChange((event, session) => {
