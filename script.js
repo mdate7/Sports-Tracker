@@ -774,11 +774,29 @@ document.getElementById("auth-send-btn").addEventListener("click", async () => {
   const { error } = await supabaseClient.auth.signInWithOtp({ email });
 
   if (error) {
-    console.error("Failed to send magic link:", error);
+    console.error("Failed to send code:", error);
     statusEl.textContent = "Something went wrong — try again.";
     return;
   }
-  statusEl.textContent = "Check your email for the link. It'll open right back here.";
+
+  statusEl.textContent = "Enter the code from your email below.";
+  document.getElementById("auth-code-field").style.display = "block";
+  document.getElementById("auth-verify-btn").style.display = "block";
+});
+
+document.getElementById("auth-verify-btn").addEventListener("click", async () => {
+  const email = document.getElementById("auth-email").value.trim();
+  const token = document.getElementById("auth-code").value.trim();
+  const statusEl = document.getElementById("auth-status");
+
+  const { error } = await supabaseClient.auth.verifyOtp({ email, token, type: "email" });
+
+  if (error) {
+    console.error("Failed to verify code:", error);
+    statusEl.textContent = "That code didn't work — check it and try again.";
+    return;
+  }
+  // onAuthStateChange's SIGNED_IN listener handles showing the app from here
 });
 
 supabaseClient.auth.onAuthStateChange((event, session) => {
