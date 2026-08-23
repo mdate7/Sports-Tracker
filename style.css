@@ -99,35 +99,6 @@
   margin-bottom: var(--s-4);
 }
 
-#match-form input,
-#match-form select {
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-field);
-  padding: 11px 13px;
-  min-height: var(--tap-min);
-  color: var(--text);
-  font: 600 0.90625rem var(--font-ui);
-}
-#match-form input::placeholder { color: var(--faint); font-weight: 400; }
-#match-form input:focus, #match-form select:focus {
-  outline: none;
-  border-color: var(--sport);
-}
-
-#match-form button[type="submit"],
-#match-form button[type="button"] {
-  display: block;
-  width: 100%;
-  padding: 16px;
-  border: 0;
-  border-radius: var(--r-btn);
-  background: var(--sport);
-  color: var(--on-accent);
-  font: var(--t-btn);
-  text-align: center;
-}
-
 /* golf wizard back/next sit side by side rather than full-width stacked */
 #match-form div[style*="flex"] button {
   width: auto;
