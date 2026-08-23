@@ -20,7 +20,7 @@ async function loadMatchesFromSupabase() {
 
   const { data, error } = await supabaseClient
     .from("matches")
-    .select("*, football_details(*), cricket_details(*), golf_details(*), golf_holes(*)")
+    .select("*, football_details(*), cricket_details(*), golf_details(*), golf_holes(*), gym_details(*), gym_sets(*)")
     .eq("user_id", userId);
 
   if (error) {
@@ -89,14 +89,16 @@ function flattenMatchRow(row) {
     };
   }
 
-  if (row.sport === "gym" && row.gym_details) {
-    const d = row.gym_details;
-    return {
-      ...base,
-      type: d.type,
-      sets: d.sets || []
-    };
-  }
+if (row.sport === "gym" && row.gym_details) {
+  const d = row.gym_details;
+  return {
+    ...base,
+    type: d.type,
+    sets: (row.gym_sets || [])
+      .sort((a, b) => a.set_number - b.set_number)
+      .map(s => ({ exercise: s.exercise, muscleGroup: s.muscle_group, weight: s.weight, reps: s.reps, rounds: s.rounds }))
+  };
+}
 
   return base;
 }
