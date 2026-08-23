@@ -142,7 +142,6 @@ const sportFields = {
   ],
   gym: [
     { key: "type", label: "Session Type", type: "text", summary: true },
-    { key: "sets", label: "Sets", type: "text" }
   ]
 };
 
@@ -868,6 +867,8 @@ function renderMatch(match) {
     const diff = getGolfScoreVsPar(match);
     const cls = match.strokes > match.par ? "delta--neg" : "";
     hero = `<span class="delta num ${cls}">${diff}</span>`;
+  } else if (match.sport === "gym") {
+    hero = `<span class="delta num">${match.sets.length} sets</span>`;
   }
 
   const title = match.opponent || match.courseName || "";
