@@ -566,12 +566,12 @@ function renderProfileScreen() {
     }
     userProfile = data;
     statusEl.textContent = "Saved.";
-  });
-}
 
-document.getElementById("me-signout-btn").addEventListener("click", async () => {
+    document.getElementById("me-signout-btn").addEventListener("click", async () => {
   await supabaseClient.auth.signOut();
 });
+  });
+}
 
 function renderMatch(match) {
   const card = document.createElement("div");
