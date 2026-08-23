@@ -35,6 +35,20 @@
   </div>
 </div>
 
+<div id="onboarding-screen" class="wizard" style="display:none;">
+  <div class="track">
+    <p class="label">Welcome</p>
+    <h1 class="title">Which sports do you track?</h1>
+    <div class="rail" id="onboard-sports" style="flex-wrap:wrap;">
+      <button class="chip" data-sport-option="football" data-sport="football" aria-pressed="false">⚽ Football</button>
+      <button class="chip" data-sport-option="cricket" data-sport="cricket" aria-pressed="false">🏏 Cricket</button>
+      <button class="chip" data-sport-option="golf" data-sport="golf" aria-pressed="false">⛳ Golf</button>
+    </div>
+    <button type="button" id="onboard-continue-btn" class="btn" style="margin-top:20px;">Continue</button>
+    <p id="onboard-status" class="tiny" style="color:var(--muted);margin-top:12px;"></p>
+  </div>
+</div>
+
 <div class="app">
 
     <header class="app-header">

@@ -149,6 +149,59 @@ let golfRound = null;
 // { courseName, numHoles, holes: [{par, strokes, putts}, ...], holeIndex }
 let editingId = null;
 
+let userProfile = null;
+
+async function loadProfile(userId) {
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Failed to load profile:", error);
+    return null;
+  }
+  return data;
+}
+
+function showOnboarding() {
+  document.getElementById("auth-screen").style.display = "none";
+  document.querySelector(".app").style.display = "none";
+  document.getElementById("onboarding-screen").style.display = "flex";
+}
+
+document.getElementById("onboard-sports").addEventListener("click", (event) => {
+  const chip = event.target.closest(".chip");
+  if (!chip) return;
+  const isPressed = chip.getAttribute("aria-pressed") === "true";
+  chip.setAttribute("aria-pressed", isPressed ? "false" : "true");
+});
+
+document.getElementById("onboard-continue-btn").addEventListener("click", async () => {
+  const selected = Array.from(document.querySelectorAll('#onboard-sports .chip[aria-pressed="true"]'))
+    .map(chip => chip.dataset.sportOption);
+
+  const userId = await ensureSignedIn();
+  if (!userId) return;
+
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .insert({ id: userId, sports_tracked: selected })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Failed to save profile:", error);
+    document.getElementById("onboard-status").textContent = "Something went wrong — try again.";
+    return;
+  }
+
+  userProfile = data;
+  document.getElementById("onboarding-screen").style.display = "none";
+  await showApp();
+});
+
 function getFieldsForSport(sport) {
   return [...commonFields, ...sportFields[sport]];
 }
@@ -471,6 +524,50 @@ await saveCourseProfile(golfRound.courseName, parPerHole);
 });
 }
 
+function renderProfileScreen() {
+  const tracked = userProfile ? userProfile.sports_tracked : [];
+  matchList.innerHTML = `
+    <div class="card">
+      <p class="label">Sports you track</p>
+      <div class="rail" id="me-sports" style="flex-wrap:wrap;margin-top:10px;">
+        <button class="chip" data-sport-option="football" data-sport="football" aria-pressed="${tracked.includes("football")}">⚽ Football</button>
+        <button class="chip" data-sport-option="cricket" data-sport="cricket" aria-pressed="${tracked.includes("cricket")}">🏏 Cricket</button>
+        <button class="chip" data-sport-option="golf" data-sport="golf" aria-pressed="${tracked.includes("golf")}">⛳ Golf</button>
+      </div>
+      <button type="button" id="me-save-btn" class="btn" style="margin-top:16px;">Save</button>
+      <p id="me-status" class="tiny" style="color:var(--muted);margin-top:10px;"></p>
+    </div>
+  `;
+
+  document.getElementById("me-sports").addEventListener("click", (event) => {
+    const chip = event.target.closest(".chip");
+    if (!chip) return;
+    const isPressed = chip.getAttribute("aria-pressed") === "true";
+    chip.setAttribute("aria-pressed", isPressed ? "false" : "true");
+  });
+
+  document.getElementById("me-save-btn").addEventListener("click", async () => {
+    const selected = Array.from(document.querySelectorAll('#me-sports .chip[aria-pressed="true"]'))
+      .map(chip => chip.dataset.sportOption);
+    const statusEl = document.getElementById("me-status");
+
+    const { data, error } = await supabaseClient
+      .from("profiles")
+      .update({ sports_tracked: selected })
+      .eq("id", userProfile.id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Failed to update profile:", error);
+      statusEl.textContent = "Something went wrong saving — try again.";
+      return;
+    }
+    userProfile = data;
+    statusEl.textContent = "Saved.";
+  });
+}
+
 function renderMatch(match) {
   const card = document.createElement("div");
   card.className = "card";
@@ -559,10 +656,10 @@ function renderView() {
   }
   if (currentMode === "me") {
     viewLabel.textContent = "Me";
-    viewTitle.textContent = "Coming soon";
-    matchList.innerHTML = `<p class="empty-state">Your profile is coming in a future stage.</p>`;
+    viewTitle.textContent = "Your sports";
+    renderProfileScreen();
     return;
-  }
+}
 
   // currentMode === "feed"
   if (currentView === "all") {
@@ -753,18 +850,6 @@ document.getElementById("import-input").addEventListener("change", (e) => {
   if (e.target.files[0]) importMatches(e.target.files[0]);
 });
 
-function showAuthScreen() {
-  document.getElementById("auth-screen").style.display = "flex";
-  document.querySelector(".app").style.display = "none";
-}
-
-async function showApp() {
-  document.getElementById("auth-screen").style.display = "none";
-  document.querySelector(".app").style.display = "block";
-  matches = await loadMatchesFromSupabase();
-  setMode("feed");
-}
-
 document.getElementById("auth-send-btn").addEventListener("click", async () => {
   const email = document.getElementById("auth-email").value.trim();
   const statusEl = document.getElementById("auth-status");
@@ -798,15 +883,38 @@ document.getElementById("auth-verify-btn").addEventListener("click", async () =>
   }
 });
 
+function showAuthScreen() {
+  document.getElementById("auth-screen").style.display = "flex";
+  document.getElementById("onboarding-screen").style.display = "none";
+  document.querySelector(".app").style.display = "none";
+}
+
+async function showApp() {
+  document.getElementById("auth-screen").style.display = "none";
+  document.getElementById("onboarding-screen").style.display = "none";
+  document.querySelector(".app").style.display = "block";
+  matches = await loadMatchesFromSupabase();
+  setMode("feed");
+}
+
+async function handleSignedIn(userId) {
+  userProfile = await loadProfile(userId);
+  if (!userProfile) {
+    showOnboarding();
+  } else {
+    await showApp();
+  }
+}
+
 supabaseClient.auth.onAuthStateChange((event, session) => {
-  if (event === "SIGNED_IN" && session) showApp();
+  if (event === "SIGNED_IN" && session) handleSignedIn(session.user.id);
   if (event === "SIGNED_OUT") showAuthScreen();
 });
 
 async function init() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {
-    showApp();
+    await handleSignedIn(session.user.id);
   } else {
     showAuthScreen();
   }
