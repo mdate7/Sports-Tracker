@@ -535,6 +535,7 @@ function renderProfileScreen() {
         <button class="chip" data-sport-option="golf" data-sport="golf" aria-pressed="${tracked.includes("golf")}">⛳ Golf</button>
       </div>
       <button type="button" id="me-save-btn" class="btn" style="margin-top:16px;">Save</button>
+      <button type="button" id="me-signout-btn" class="btn btn--ghost" style="margin-top:12px;">Sign out</button>
       <p id="me-status" class="tiny" style="color:var(--muted);margin-top:10px;"></p>
     </div>
   `;
@@ -567,6 +568,10 @@ function renderProfileScreen() {
     statusEl.textContent = "Saved.";
   });
 }
+
+document.getElementById("me-signout-btn").addEventListener("click", async () => {
+  await supabaseClient.auth.signOut();
+});
 
 function renderMatch(match) {
   const card = document.createElement("div");
