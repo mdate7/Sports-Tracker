@@ -89,12 +89,21 @@ function flattenMatchRow(row) {
     };
   }
 
+  if (row.sport === "gym" && row.gym_details) {
+    const d = row.gym_details;
+    return {
+      ...base,
+      type: d.type,
+      sets: d.sets || []
+    };
+  }
+
   return base;
 }
 
 const commonFields = [
   { key: "date", label: "Date", type: "date", summary: true },
-  { key: "matchRating", label: "Match Rating", type: "number", summary: true },
+  { key: "matchRating", label: "Rating", type: "number", summary: true },
   { key: "notes", label: "Notes", type: "text" }
 ];
 
@@ -128,10 +137,14 @@ const sportFields = {
     { key: "par", label: "Course Par", type: "number" },
     { key: "holesPlayed", label: "Holes Played", type: "number" },
     { key: "playedWith", label: "Played With", type: "text", summary: true }
+  ],
+  gym: [
+    { key: "type", label: "Session Type", type: "text", summary: true },
+    { key: "sets", label: "Sets", type: "text" }
   ]
 };
 
-const sportNames = { football: "Football", cricket: "Cricket", golf: "Golf" };
+const sportNames = { football: "Football", cricket: "Cricket", golf: "Golf", gym: "Gym" };
 const CURRENT_USER_ID = "me";
 
 const tabBar = document.getElementById("tab-bar");
@@ -147,6 +160,7 @@ let matches = [];
 let golfRound = null;
 // shape while in progress:
 // { courseName, numHoles, holes: [{par, strokes, putts}, ...], holeIndex }
+let gymSession = null; // { type, sets: [{ exercise, muscleGroup, weight, reps, rounds }, ...] }
 let editingId = null;
 
 let userProfile = null;
@@ -221,6 +235,8 @@ function openSportForm(sport) {
     } else {
       buildGolfSetup();
     }
+  } else if (sport === "gym") {
+    buildGymSetup();
   } else {
     buildForm(sport);
   }
@@ -233,6 +249,7 @@ function buildSportPicker() {
     <button type="button" class="btn" data-pick-sport="football">⚽ Football</button>
     <button type="button" class="btn btn--ghost" data-pick-sport="cricket">🏏 Cricket</button>
     <button type="button" class="btn btn--ghost" data-pick-sport="golf">⛳ Golf</button>
+    <button type="button" class="btn btn--ghost" data-pick-sport="gym">🏋️ Gym</button>
   `;
   form.querySelectorAll("[data-pick-sport]").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -350,7 +367,7 @@ function buildForm(sport, existingMatch = null) {
   const button = document.createElement("button");
   button.type = "submit";
   button.className = "btn";
-  button.textContent = existingMatch ? "Save Changes" : "Add Match";
+  button.textContent = existingMatch ? "Save Changes" : "Add Activity";
   form.appendChild(button);
 }
 
@@ -448,7 +465,7 @@ form.innerHTML = `
     <input type="date" id="golf-date" required>
   </div>
   <div class="field">
-    <label class="label" for="golf-rating">Match Rating</label>
+    <label class="label" for="golf-rating">Rating</label>
     <input type="number" id="golf-rating" required>
   </div>
   <div class="field">
@@ -524,6 +541,254 @@ await saveCourseProfile(golfRound.courseName, parPerHole);
 });
 }
 
+function buildGymSetup() {
+  form.innerHTML = `
+    <p class="label">Type</p>
+    <div class="chips" id="gym-type-rail" style="flex-wrap:wrap;">
+      <button type="button" class="chip" data-gym-type="strength" data-sport="gym" aria-pressed="false">Strength</button>
+      <button type="button" class="chip" data-gym-type="hiit" data-sport="gym" aria-pressed="false">HIIT</button>
+      <button type="button" class="chip" data-gym-type="class" data-sport="gym" aria-pressed="false">Class</button>
+    </div>
+    <button type="button" id="gym-start-btn" class="btn" style="margin-top:16px;">Start Session</button>
+  `;
+
+  document.getElementById("gym-type-rail").addEventListener("click", (event) => {
+    const chip = event.target.closest(".chip");
+    if (!chip) return;
+    document.querySelectorAll("#gym-type-rail .chip").forEach(c => c.setAttribute("aria-pressed", "false"));
+    chip.setAttribute("aria-pressed", "true");
+  });
+
+  document.getElementById("gym-start-btn").addEventListener("click", () => {
+    const selected = document.querySelector('#gym-type-rail .chip[aria-pressed="true"]');
+    if (!selected) {
+      alert("Pick a session type first.");
+      return;
+    }
+    gymSession = { type: selected.dataset.gymType, sets: [] };
+    console.log(gymSession)
+    renderGymSets();
+  });
+}
+
+function renderGymSets() {
+  const setsHtml = gymSession.sets.map((set, index) => `
+    <div class="card" style="margin-bottom:10px;">
+      <div class="field">
+        <label class="label" for="set-exercise-${index}">Exercise</label>
+        <input type="text" id="set-exercise-${index}" value="${set.exercise}">
+      </div>
+      <div class="field">
+        <label class="label" for="set-muscle-${index}">Muscle group</label>
+        <input type="text" id="set-muscle-${index}" value="${set.muscleGroup}">
+      </div>
+      <div style="display:flex; gap:8px;">
+        <div class="field" style="flex:1;">
+          <label class="label" for="set-weight-${index}">Weight</label>
+          <input type="number" id="set-weight-${index}" value="${set.weight}">
+        </div>
+        <div class="field" style="flex:1;">
+          <label class="label" for="set-reps-${index}">Reps</label>
+          <input type="number" id="set-reps-${index}" value="${set.reps}">
+        </div>
+        <div class="field" style="flex:1;">
+          <label class="label" for="set-rounds-${index}">Rounds</label>
+          <input type="number" id="set-rounds-${index}" value="${set.rounds}">
+        </div>
+      </div>
+      <button type="button" class="btn btn--ghost btn--sm" data-remove-set="${index}" style="margin-top:8px;">Remove set</button>
+    </div>
+  `).join("");
+
+  form.innerHTML = `
+    <p class="label">${sportNames.gym} · ${gymSession.type}</p>
+    <div id="gym-sets-list">${setsHtml}</div>
+    <button type="button" id="gym-add-set-btn" class="btn btn--ghost" style="margin-top:8px;">+ Add set</button>
+    <button type="button" id="gym-finish-btn" class="btn" style="margin-top:16px;">Finish Session</button>
+  `;
+
+  document.getElementById("gym-add-set-btn").addEventListener("click", () => {
+    saveGymSetInputs();
+    gymSession.sets.push({ exercise: "", muscleGroup: "", weight: "", reps: "", rounds: "" });
+    renderGymSets();
+  });
+
+  document.querySelectorAll("[data-remove-set]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      saveGymSetInputs();
+      gymSession.sets.splice(Number(btn.dataset.removeSet), 1);
+      renderGymSets();
+    });
+  });
+
+  document.getElementById("gym-finish-btn").addEventListener("click", () => {
+    saveGymSetInputs();
+    finishGymSession(); // build this next, mirroring finishGolfRound
+  });
+}
+
+function saveGymSetInputs() {
+  gymSession.sets.forEach((set, index) => {
+    set.exercise = document.getElementById(`set-exercise-${index}`)?.value || "";
+    set.muscleGroup = document.getElementById(`set-muscle-${index}`)?.value || "";
+    set.weight = document.getElementById(`set-weight-${index}`)?.value !== "" 
+  ? Number(document.getElementById(`set-weight-${index}`).value) 
+  : "";
+    set.reps = Number(document.getElementById(`set-reps-${index}`)?.value) || "";
+    set.rounds = Number(document.getElementById(`set-rounds-${index}`)?.value) || "";
+  });
+}
+
+function finishGymSession() {
+  form.innerHTML = `
+    <div class="field">
+      <label class="label" for="gym-date">Date</label>
+      <input type="date" id="gym-date" required>
+    </div>
+    <div class="field">
+      <label class="label" for="gym-rating">Rating</label>
+      <input type="number" id="gym-rating" required>
+    </div>
+    <div class="field">
+      <label class="label" for="gym-notes">Notes (optional)</label>
+      <input type="text" id="gym-notes">
+    </div>
+    <button type="button" id="gym-save-btn" class="btn">Save Session</button>
+  `;
+
+  document.getElementById("gym-save-btn").addEventListener("click", async () => {
+    const userId = await ensureSignedIn();
+    if (!userId) {
+      alert("Couldn't verify your session — try again.");
+      return;
+    }
+
+    const { data: matchRow, error: matchError } = await supabaseClient
+      .from("matches")
+      .insert({
+        user_id: userId,
+        sport: "gym",
+        date: document.getElementById("gym-date").value,
+        match_rating: Number(document.getElementById("gym-rating").value),
+        notes: document.getElementById("gym-notes").value || null
+      })
+      .select()
+      .single();
+
+    if (matchError) {
+      console.error("Failed to save session:", matchError);
+      alert("Something went wrong saving this session — check the console.");
+      return;
+    }
+
+    const { error: detailError } = await supabaseClient
+      .from("gym_details")
+      .insert({ match_id: matchRow.id, type: gymSession.type });
+    if (detailError) console.error("Failed to save gym details:", detailError);
+
+    const setRows = gymSession.sets.map((set, index) => ({
+      match_id: matchRow.id,
+      set_number: index + 1,
+      exercise: set.exercise,
+      muscle_group: set.muscleGroup,
+      weight: set.weight || null,
+      reps: set.reps || null,
+      rounds: set.rounds || null
+    }));
+
+    const { error: setsError } = await supabaseClient.from("gym_sets").insert(setRows);
+    if (setsError) console.error("Failed to save sets:", setsError);
+
+    gymSession = null;
+    matches = await loadMatchesFromSupabase();
+    renderView();
+    form.style.display = "none";
+  });
+}
+
+function finishGolfRound() {
+  form.innerHTML = `
+    <div class="field">
+      <label class="label" for="golf-date">Date</label>
+      <input type="date" id="golf-date" required>
+    </div>
+    <div class="field">
+      <label class="label" for="golf-rating">Rating</label>
+      <input type="number" id="golf-rating" required>
+    </div>
+    <div class="field">
+      <label class="label" for="golf-played-with">Played With (optional)</label>
+      <input type="text" id="golf-played-with">
+    </div>
+    <div class="field">
+      <label class="label" for="golf-notes">Notes (optional)</label>
+      <input type="text" id="golf-notes">
+    </div>
+    <button type="button" id="golf-save-btn" class="btn">Save Round</button>
+  `;
+
+  document.getElementById("golf-save-btn").addEventListener("click", async () => {
+    const totalStrokes = golfRound.holes.reduce((sum, h) => sum + (h.strokes || 0), 0);
+    const totalPar = golfRound.holes.reduce((sum, h) => sum + (h.par || 0), 0);
+    const parPerHole = golfRound.holes.map(h => h.par);
+
+    await saveCourseProfile(golfRound.courseName, parPerHole);
+
+    const userId = await ensureSignedIn();
+    if (!userId) {
+      alert("Couldn't verify your session — try again.");
+      return;
+    }
+
+    const { data: matchRow, error: matchError } = await supabaseClient
+      .from("matches")
+      .insert({
+        user_id: userId,
+        sport: "golf",
+        date: document.getElementById("golf-date").value,
+        match_rating: Number(document.getElementById("golf-rating").value),
+        notes: document.getElementById("golf-notes").value || null
+      })
+      .select()
+      .single();
+
+    if (matchError) {
+      console.error("Failed to save round:", matchError);
+      alert("Something went wrong saving this round — check the console.");
+      return;
+    }
+
+    const { error: detailError } = await supabaseClient
+      .from("golf_details")
+      .insert({
+        match_id: matchRow.id,
+        course_name: golfRound.courseName,
+        played_with: document.getElementById("golf-played-with").value || null,
+        strokes: totalStrokes,
+        par: totalPar,
+        holes_played: golfRound.numHoles
+      });
+    if (detailError) console.error("Failed to save golf details:", detailError);
+
+    const holeRows = golfRound.holes.map((h, i) => ({
+      match_id: matchRow.id,
+      hole_number: i + 1,
+      par: h.par,
+      strokes: h.strokes,
+      putts: h.putts || null
+    }));
+
+    const { error: holesError } = await supabaseClient.from("golf_holes").insert(holeRows);
+    if (holesError) console.error("Failed to save hole-by-hole data:", holesError);
+
+    clearRoundProgress();
+    golfRound = null;
+    matches = await loadMatchesFromSupabase();
+    renderView();
+    form.style.display = "none";
+  });
+}
+
 function renderProfileScreen() {
   const tracked = userProfile ? userProfile.sports_tracked : [];
   matchList.innerHTML = `
@@ -533,6 +798,7 @@ function renderProfileScreen() {
         <button class="chip" data-sport-option="football" data-sport="football" aria-pressed="${tracked.includes("football")}">⚽ Football</button>
         <button class="chip" data-sport-option="cricket" data-sport="cricket" aria-pressed="${tracked.includes("cricket")}">🏏 Cricket</button>
         <button class="chip" data-sport-option="golf" data-sport="golf" aria-pressed="${tracked.includes("golf")}">⛳ Golf</button>
+        <button class="chip" data-sport-option="gym" data-sport="gym" aria-pressed="${tracked.includes("gym")}">🏋️ Gym</button>
       </div>
       <button type="button" id="me-save-btn" class="btn" style="margin-top:16px;">Save</button>
       <button type="button" id="me-signout-btn" class="btn btn--ghost" style="margin-top:12px;">Sign out</button>
@@ -638,7 +904,7 @@ function renderList(list) {
 const sorted = [...list].sort((a, b) => new Date(b.date) - new Date(a.date));
   matchList.innerHTML = "";
   if (list.length === 0) {
-    matchList.innerHTML = `<p class="empty-state">No matches yet.</p>`;
+    matchList.innerHTML = `<p class="empty-state">No activities yet.</p>`;
     return;
   }
   sorted.forEach(renderMatch);
@@ -706,14 +972,14 @@ function startEdit(id) {
 
 async function deleteMatch(id) {
   const match = matches.find(m => m.id === id);
-  const label = match.opponent || match.courseName || "this match";
+  const label = match.opponent || match.courseName || "this activity";
   const confirmed = confirm(`Delete ${label}? This can't be undone.`);
   if (!confirmed) return;
 
   const { error } = await supabaseClient.from("matches").delete().eq("id", id);
   if (error) {
     console.error("Failed to delete match:", error);
-    alert("Something went wrong deleting this match — check the console.");
+    alert("Something went wrong deleting this activity — check the console.");
     return;
   }
 
@@ -809,7 +1075,7 @@ form.addEventListener("submit", async function (event) {
 
     if (matchError) {
       console.error("Failed to update match:", matchError);
-      alert("Something went wrong updating this match — check the console.");
+      alert("Something went wrong updating this activity — check the console.");
       return;
     }
 
@@ -830,7 +1096,7 @@ form.addEventListener("submit", async function (event) {
 
     if (matchError) {
       console.error("Failed to save match:", matchError);
-      alert("Something went wrong saving this match — check the console.");
+      alert("Something went wrong saving this activity — check the console.");
       return;
     }
 
