@@ -237,7 +237,19 @@ function openSportForm(sport) {
       buildGolfSetup();
     }
   } else if (sport === "gym") {
-    buildGymSetup();
+    const saved = localStorage.getItem("inProgressGymSession");
+    if (saved) {
+        const resume = confirm("You have an unfinished gym session in progress. Resume it?");
+        if (resume) {
+            gymSession = JSON.parse(saved);
+            renderGymSets();
+        } else {
+            clearSessionProgress();
+            buildGymSetup();
+        }
+    } else {
+        buildGymSetup();
+    }   
   } else {
     buildForm(sport);
   }
@@ -341,6 +353,14 @@ function saveRoundProgress() {
 
 function clearRoundProgress() {
   localStorage.removeItem("inProgressGolfRound");
+}
+
+function saveSessionProgress() {
+  localStorage.setItem("inProgressGymSession", JSON.stringify(gymSession));
+}
+
+function clearSessionProgress() {
+  localStorage.removeItem("inProgressGymSession");
 }
 
 function buildForm(sport, existingMatch = null) {
@@ -459,89 +479,6 @@ function saveCurrentHoleInputs() {
   hole.putts = Number(document.getElementById("hole-putts").value) || "";
 }
 
-function finishGolfRound() {
-form.innerHTML = `
-  <div class="field">
-    <label class="label" for="golf-date">Date</label>
-    <input type="date" id="golf-date" required>
-  </div>
-  <div class="field">
-    <label class="label" for="golf-rating">Rating</label>
-    <input type="number" id="golf-rating" required>
-  </div>
-  <div class="field">
-    <label class="label" for="golf-played-with">Played With (optional)</label>
-    <input type="text" id="golf-played-with">
-  </div>
-  <div class="field">
-    <label class="label" for="golf-notes">Notes (optional)</label>
-    <input type="text" id="golf-notes">
-  </div>
-  <button type="button" id="golf-save-btn" class="btn">Save Round</button>
-`;
-
-document.getElementById("golf-save-btn").addEventListener("click", async () => {
-  const totalStrokes = golfRound.holes.reduce((sum, h) => sum + (h.strokes || 0), 0);
-  const totalPar = golfRound.holes.reduce((sum, h) => sum + (h.par || 0), 0);
-  const parPerHole = golfRound.holes.map(h => h.par);
-
-await saveCourseProfile(golfRound.courseName, parPerHole);
-
-  const userId = await ensureSignedIn();
-  if (!userId) {
-    alert("Couldn't verify your session — try again.");
-    return;
-  }
-
-  const { data: matchRow, error: matchError } = await supabaseClient
-    .from("matches")
-    .insert({
-      user_id: userId,
-      sport: "golf",
-      date: document.getElementById("golf-date").value,
-      match_rating: Number(document.getElementById("golf-rating").value),
-      notes: document.getElementById("golf-notes").value || null
-    })
-    .select()
-    .single();
-
-  if (matchError) {
-    console.error("Failed to save round:", matchError);
-    alert("Something went wrong saving this round — check the console.");
-    return;
-  }
-
-  const { error: detailError } = await supabaseClient
-    .from("golf_details")
-    .insert({
-      match_id: matchRow.id,
-      course_name: golfRound.courseName,
-      played_with: document.getElementById("golf-played-with").value || null,
-      strokes: totalStrokes,
-      par: totalPar,
-      holes_played: golfRound.numHoles
-    });
-  if (detailError) console.error("Failed to save golf details:", detailError);
-
-  const holeRows = golfRound.holes.map((h, i) => ({
-    match_id: matchRow.id,
-    hole_number: i + 1,
-    par: h.par,
-    strokes: h.strokes,
-    putts: h.putts || null
-  }));
-
-  const { error: holesError } = await supabaseClient.from("golf_holes").insert(holeRows);
-  if (holesError) console.error("Failed to save hole-by-hole data:", holesError);
-
-  clearRoundProgress();
-  golfRound = null;
-  matches = await loadMatchesFromSupabase();
-  renderView();
-  form.style.display = "none";
-});
-}
-
 function buildGymSetup() {
   form.innerHTML = `
     <p class="label">Type</p>
@@ -567,7 +504,7 @@ function buildGymSetup() {
       return;
     }
     gymSession = { type: selected.dataset.gymType, sets: [] };
-    console.log(gymSession)
+    saveSessionProgress();
     renderGymSets();
   });
 }
@@ -611,6 +548,7 @@ function renderGymSets() {
   document.getElementById("gym-add-set-btn").addEventListener("click", () => {
     saveGymSetInputs();
     gymSession.sets.push({ exercise: "", muscleGroup: "", weight: "", reps: "", rounds: "" });
+    saveSessionProgress();
     renderGymSets();
   });
 
@@ -618,6 +556,7 @@ function renderGymSets() {
     btn.addEventListener("click", () => {
       saveGymSetInputs();
       gymSession.sets.splice(Number(btn.dataset.removeSet), 1);
+      saveSessionProgress();
       renderGymSets();
     });
   });
@@ -700,6 +639,7 @@ function finishGymSession() {
     const { error: setsError } = await supabaseClient.from("gym_sets").insert(setRows);
     if (setsError) console.error("Failed to save sets:", setsError);
 
+    clearSessionProgress();
     gymSession = null;
     matches = await loadMatchesFromSupabase();
     renderView();
