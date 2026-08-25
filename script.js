@@ -751,6 +751,10 @@ function finishGolfRound() {
 function renderProfileScreen() {
   const tracked = userProfile ? userProfile.sports_tracked : [];
   matchList.innerHTML = `
+  <div class="field">
+  <label class="label" for="me-display-name">Display name</label>
+  <input type="text" id="me-display-name" value="${userProfile?.display_name || ""}">
+    </div>
     <div class="card">
       <p class="label">Sports you track</p>
       <div class="rail" id="me-sports" style="flex-wrap:wrap;margin-top:10px;">
@@ -779,8 +783,7 @@ function renderProfileScreen() {
 
     const { data, error } = await supabaseClient
       .from("profiles")
-      .update({ sports_tracked: selected })
-      .eq("id", userProfile.id)
+      .update({ sports_tracked: selected, display_name: document.getElementById("me-display-name").value.trim() || null })      .eq("id", userProfile.id)
       .select()
       .single();
 
