@@ -167,6 +167,7 @@ let editingId = null;
 let userTeams = [];
 let teamsSubView = "list"; // "list" | "create" | "join"
 
+
 async function loadUserTeams() {
   const userId = await ensureSignedIn();
   if (!userId) return [];
@@ -180,6 +181,75 @@ async function loadUserTeams() {
 
 function generateInviteCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+let currentTeamId = null;
+
+async function loadTeamDetail(teamId) {
+  const { data: team, error: teamError } = await supabaseClient
+    .from("teams")
+    .select("*")
+    .eq("id", teamId)
+    .single();
+
+  const { data: members, error: membersError } = await supabaseClient
+    .from("team_members")
+    .select("user_id, role, profiles(display_name)")
+    .eq("team_id", teamId);
+
+  if (teamError || membersError) {
+    console.error("Failed to load team:", teamError || membersError);
+    return null;
+  }
+  return { ...team, members };
+}
+
+async function renderTeamDetail() {
+  const team = await loadTeamDetail(currentTeamId);
+  if (!team) return;
+
+  const userId = await ensureSignedIn();
+  const membersHtml = team.members.map(m => `
+    <div class="card-details" style="display:flex;">
+      <span>${m.profiles?.display_name || "Unnamed player"}</span>
+      <span class="label">${m.role}</span>
+    </div>
+  `).join("");
+
+  matchList.innerHTML = `
+    <div class="card" data-sport="${team.sport}">
+      <p class="stat-value">${team.name}</p>
+      <p class="label" style="margin-top:4px;">${sportNames[team.sport]} · Invite code: ${team.invite_code}</p>
+    </div>
+    <p class="label" style="margin-top:16px;">Members (${team.members.length})</p>
+    <div class="card">${membersHtml}</div>
+    <button type="button" id="team-back-btn" class="btn btn--ghost" style="margin-top:16px;">Back to teams</button>
+    <button type="button" id="team-leave-btn" class="btn btn--ghost" style="margin-top:10px;">Leave team</button>
+  `;
+
+  document.getElementById("team-back-btn").addEventListener("click", () => {
+    currentTeamId = null;
+    renderTeamsScreen();
+  });
+
+  document.getElementById("team-leave-btn").addEventListener("click", async () => {
+    const confirmed = confirm(`Leave ${team.name}?`);
+    if (!confirmed) return;
+
+    const { error } = await supabaseClient
+      .from("team_members")
+      .delete()
+      .eq("team_id", team.id)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("Failed to leave team:", error);
+      return;
+    }
+    currentTeamId = null;
+    userTeams = await loadUserTeams();
+    renderTeamsScreen();
+  });
 }
 
 let userProfile = null;
@@ -806,18 +876,26 @@ function renderTeamsScreen() {
   if (teamsSubView === "join") return renderJoinTeamForm();
 
 const teamsHtml = userTeams.map(t => `
-  <div class="card" style="margin-bottom:10px;" data-sport="${t.sport}">
+  <div class="card" style="margin-bottom:10px;cursor:pointer;" data-sport="${t.sport}" data-team-id="${t.id}">
     <p class="stat-value">${t.name}</p>
     <p class="label" style="margin-top:4px;">${sportNames[t.sport]} · Invite code: ${t.invite_code}</p>
   </div>
 `).join("");
 
-  matchList.innerHTML = `
+matchList.innerHTML = `
+  <div id="teams-list">
     ${teamsHtml || `<p class="empty-state">No teams yet.</p>`}
-    <button type="button" id="create-team-btn" class="btn" style="margin-top:8px;">Create a team</button>
-    <button type="button" id="join-team-btn" class="btn btn--ghost" style="margin-top:10px;">Join a team</button>
-  `;
+  </div>
+  <button type="button" id="create-team-btn" class="btn" style="margin-top:8px;">Create a team</button>
+  <button type="button" id="join-team-btn" class="btn btn--ghost" style="margin-top:10px;">Join a team</button>
+`;
 
+  document.getElementById("teams-list").addEventListener("click", async (event) => {
+  const card = event.target.closest("[data-team-id]");
+  if (!card) return;
+  currentTeamId = card.dataset.teamId;
+  await renderTeamDetail();
+    });
   document.getElementById("create-team-btn").addEventListener("click", () => {
     teamsSubView = "create";
     renderTeamsScreen();
