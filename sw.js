@@ -1,4 +1,4 @@
-const CACHE_NAME = "clubhouse-v3";
+const CACHE_NAME = "clubhouse-v4";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -26,9 +26,19 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+});
+
 self.addEventListener("fetch", (event) => {
-  // Don't intercept Supabase requests — those need to always hit the real network
-  if (event.request.url.includes("supabase.co")) return;
+  const url = event.request.url;
+  if (url.includes("supabase.co")) return;
+
+  // Always fetch these fresh from the network — never serve a stale cached copy
+  if (url.includes("index.html") || url.includes("script.js") || event.request.mode === "navigate") {
+    event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request))
