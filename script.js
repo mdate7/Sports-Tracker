@@ -209,12 +209,12 @@ async function renderTeamDetail() {
   if (!team) return;
 
   const userId = await ensureSignedIn();
-  const membersHtml = team.members.map(m => `
-    <div class="card-details" style="display:flex;">
-      <span>${m.profiles?.display_name || "Unnamed player"}</span>
-      <span class="label">${m.role}</span>
-    </div>
-  `).join("");
+const membersHtml = team.members.map(m => `
+  <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
+    <span>${m.profiles?.display_name || "Unnamed player"}</span>
+    <span class="label">${m.role}</span>
+  </div>
+`).join("");
 
   matchList.innerHTML = `
     <div class="card" data-sport="${team.sport}">
