@@ -286,6 +286,40 @@ function renderGolfDetailHtml(match) {
   `;
 }
 
+function renderGymDetailHtml(match) {
+  if (!match.sets || match.sets.length === 0) return "";
+
+  const totalVolume = match.sets.reduce((sum, s) => sum + ((s.weight || 0) * (s.reps || 0) * (s.rounds || 1)), 0);
+  const distinctExercises = new Set(match.sets.map(s => s.exercise).filter(Boolean)).size;
+
+  const groups = {};
+  match.sets.forEach(s => {
+    const key = s.exercise || "Unnamed exercise";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(s);
+  });
+
+  const groupsHtml = Object.entries(groups).map(([exercise, sets]) => `
+    <div style="margin-top:14px;">
+      <p class="stat-value" style="font-size:0.95rem;">${exercise}</p>
+      ${sets.map(s => `
+        <p class="label" style="margin-top:4px;">
+          ${s.weight || 0}kg × ${s.reps || 0} reps${s.rounds && s.rounds > 1 ? ` × ${s.rounds} rounds` : ""}
+        </p>
+      `).join("")}
+    </div>
+  `).join("");
+
+  return `
+    <div class="stats" style="margin-top:12px;">
+      <div><span class="stat-value num">${match.sets.length}</span><p class="label">Sets</p></div>
+      <div><span class="stat-value num">${distinctExercises}</span><p class="label">Exercises</p></div>
+      <div><span class="stat-value num">${totalVolume}</span><p class="label">Volume (kg)</p></div>
+    </div>
+    ${groupsHtml}
+  `;
+}
+
 function getGolfScoreVsPar(match) {
   const diff = match.strokes - match.par;
   if (diff === 0) return "E";
@@ -511,6 +545,7 @@ function renderMatch(match) {
 
   const detailRows = detailFields.map(f => `<li>${f.label}: ${match[f.key]}</li>`).join("");
   const golfBreakdown = match.sport === "golf" ? renderGolfDetailHtml(match) : "";
+  const gymBreakdown = match.sport === "gym" ? renderGymDetailHtml(match) : "";
 
   let hero = "";
   if (match.sport === "football") {
@@ -547,7 +582,7 @@ function renderMatch(match) {
 const toggleBtn = card.querySelector(".toggle-details-btn");
 const detailsList = card.querySelector(".card-details");
 
-if (match.sport === "golf") {
+if (match.sport === "golf" || match.sport === "gym") {
   toggleBtn.addEventListener("click", () => {
     currentDetailMatchId = match.id;
     renderMatchDetailScreen();
@@ -632,10 +667,10 @@ function renderMatchDetailScreen() {
   `).join("");
 
   const golfBreakdown = match.sport === "golf" ? renderGolfDetailHtml(match) : "";
+  const gymBreakdown = match.sport === "gym" ? renderGymDetailHtml(match) : "";
   const title = match.opponent || match.courseName || "";
-  const editButton = match.sport === "golf"
-
-  ? `<button type="button" id="detail-edit-btn" class="btn btn--ghost btn--sm" style="margin-top:12px;">Edit round</button>`
+const editButton = match.sport === "golf" || match.sport === "gym"
+  ? `<button type="button" id="detail-edit-btn" class="btn btn--ghost btn--sm" style="margin-top:12px;">Edit ${match.sport === "golf" ? "round" : "session"}</button>`
   : "";
 
   matchList.innerHTML = `
@@ -645,6 +680,7 @@ function renderMatchDetailScreen() {
       <p class="card-meta">${match.date || ""}</p>
       <div class="stats" style="margin-top:12px;">${statBlocks}</div>
       ${golfBreakdown}
+      ${gymBreakdown}
       ${editButton}
     </div>
   `;
@@ -655,11 +691,13 @@ function renderMatchDetailScreen() {
     renderView();
   });
 
-    if (match.sport === "golf") {                                                   
-    document.getElementById("detail-edit-btn").addEventListener("click", () => {   
-      editGolfRound(match);                                                        
-    });                                                                            
-  }  
+  document.getElementById("detail-edit-btn").addEventListener("click", () => {
+  if (match.sport === "golf") {
+    editGolfRound(match);
+  } else if (match.sport === "gym") {
+    editGymSession(match);
+  }
+});
 }
 
 function renderView() {

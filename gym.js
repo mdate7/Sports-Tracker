@@ -85,7 +85,7 @@ function renderGymSets() {
   document.getElementById("gym-add-set-btn").addEventListener("click", () => {
     saveGymSetInputs();
     gymSession.sets.push({ exercise: "", muscleGroup: "", weight: "", reps: "", rounds: "" });
-    saveSessionProgress();
+if (!gymSession.editingMatchId) saveSessionProgress();
     renderGymSets();
   });
 
@@ -93,7 +93,7 @@ function renderGymSets() {
     btn.addEventListener("click", () => {
       saveGymSetInputs();
       gymSession.sets.splice(Number(btn.dataset.removeSet), 1);
-      saveSessionProgress();
+if (!gymSession.editingMatchId) saveSessionProgress();
       renderGymSets();
     });
   });
@@ -118,20 +118,22 @@ function saveGymSetInputs() {
 }
 
 function finishGymSession() {
+  const existing = gymSession.editingMatchId ? matches.find(m => m.id === gymSession.editingMatchId) : null;
+
   form.innerHTML = `
     <div class="field">
       <label class="label" for="gym-date">Date</label>
-      <input type="date" id="gym-date" value="${todayISODate()}" required>
+      <input type="date" id="gym-date" value="${existing ? existing.date : todayISODate()}" required>
     </div>
     <div class="field">
       <label class="label" for="gym-rating">Rating</label>
-      <input type="number" id="gym-rating" required>
+      <input type="number" id="gym-rating" value="${existing ? existing.matchRating ?? "" : ""}" required>
     </div>
     <div class="field">
       <label class="label" for="gym-notes">Notes (optional)</label>
-      <input type="text" id="gym-notes">
+      <input type="text" id="gym-notes" value="${existing ? existing.notes ?? "" : ""}">
     </div>
-    <button type="button" id="gym-save-btn" class="btn">Save Session</button>
+    <button type="button" id="gym-save-btn" class="btn">${existing ? "Save Changes" : "Save Session"}</button>
   `;
 
   document.getElementById("gym-save-btn").addEventListener("click", async () => {
@@ -141,71 +143,80 @@ function finishGymSession() {
       return;
     }
 
-    const dateValue = document.getElementById("gym-date")?.value;
-    const ratingValue = document.getElementById("gym-rating")?.value;
-    const notesValue = document.getElementById("gym-notes")?.value || "";
+    const dateValue = document.getElementById("gym-date").value;
+    const ratingValue = Number(document.getElementById("gym-rating").value);
+    const notesValue = document.getElementById("gym-notes").value || null;
 
-    if (!dateValue || !ratingValue) {
-      alert("Please add a date and rating before saving.");
-      return;
-    }
+    if (gymSession.editingMatchId) {
+      const matchId = gymSession.editingMatchId;
 
-    const sessionPayload = {
-      userId,
-      sport: "gym",
-      type: gymSession.type,
-      date: dateValue,
-      rating: Number(ratingValue),
-      notes: notesValue,
-      sets: gymSession.sets.map(set => ({
-        exercise: set.exercise || "",
-        muscleGroup: set.muscleGroup || "",
+      const { error: matchError } = await supabaseClient
+        .from("matches")
+        .update({ date: dateValue, match_rating: ratingValue, notes: notesValue })
+        .eq("id", matchId);
+      if (matchError) {
+        console.error("Failed to update session:", matchError);
+        alert("Something went wrong updating this session — check the console.");
+        return;
+      }
+
+      const { error: detailError } = await supabaseClient
+        .from("gym_details")
+        .update({ type: gymSession.type })
+        .eq("match_id", matchId);
+      if (detailError) console.error("Failed to update gym details:", detailError);
+
+      const { error: deleteSetsError } = await supabaseClient.from("gym_sets").delete().eq("match_id", matchId);
+      if (deleteSetsError) console.error("Failed to clear old sets:", deleteSetsError);
+
+      const setRows = gymSession.sets.map((set, index) => ({
+        match_id: matchId,
+        set_number: index + 1,
+        exercise: set.exercise,
+        muscle_group: set.muscleGroup,
         weight: set.weight === "" ? null : Number(set.weight),
         reps: set.reps === "" ? null : Number(set.reps),
         rounds: set.rounds === "" ? null : Number(set.rounds)
-      }))
-    };
+      }));
+      const { error: setsError } = await supabaseClient.from("gym_sets").insert(setRows);
+      if (setsError) console.error("Failed to save updated sets:", setsError);
 
-const { data: matchRow, error: matchError } = await supabaseClient
-  .from("matches")
-  .insert({
-    user_id: sessionPayload.userId,
-    sport: "gym",
-    date: sessionPayload.date,
-    match_rating: sessionPayload.rating,
-    notes: sessionPayload.notes || null
-  })
-  .select()
-  .single();
+    } else {
+      const { data: matchRow, error: matchError } = await supabaseClient
+        .from("matches")
+        .insert({ user_id: userId, sport: "gym", date: dateValue, match_rating: ratingValue, notes: notesValue })
+        .select()
+        .single();
+      if (matchError) {
+        console.error("Failed to save session:", matchError);
+        alert("Something went wrong saving this session — check the console.");
+        return;
+      }
 
-if (matchError) {
-  console.error("Failed to save session:", matchError);
-  alert("Something went wrong saving this session — check the console.");
-  return;
-}
+      const { error: detailError } = await supabaseClient
+        .from("gym_details")
+        .insert({ match_id: matchRow.id, type: gymSession.type });
+      if (detailError) console.error("Failed to save gym details:", detailError);
 
-const { error: detailError } = await supabaseClient
-  .from("gym_details")
-  .insert({ match_id: matchRow.id, type: sessionPayload.type });
-if (detailError) console.error("Failed to save gym details:", detailError);
+      const setRows = gymSession.sets.map((set, index) => ({
+        match_id: matchRow.id,
+        set_number: index + 1,
+        exercise: set.exercise,
+        muscle_group: set.muscleGroup,
+        weight: set.weight === "" ? null : Number(set.weight),
+        reps: set.reps === "" ? null : Number(set.reps),
+        rounds: set.rounds === "" ? null : Number(set.rounds)
+      }));
+      const { error: setsError } = await supabaseClient.from("gym_sets").insert(setRows);
+      if (setsError) console.error("Failed to save sets:", setsError);
 
-const setRows = sessionPayload.sets.map((set, index) => ({
-  match_id: matchRow.id,
-  set_number: index + 1,
-  exercise: set.exercise,
-  muscle_group: set.muscleGroup,
-  weight: set.weight,
-  reps: set.reps,
-  rounds: set.rounds
-}));
+      clearSessionProgress();
+    }
 
-const { error: setsError } = await supabaseClient.from("gym_sets").insert(setRows);
-if (setsError) console.error("Failed to save sets:", setsError);
     gymSession = null;
-clearSessionProgress();
-matches = await loadMatchesFromSupabase();
-renderView();
-form.style.display = "none";
+    matches = await loadMatchesFromSupabase();
+    renderView();
+    form.style.display = "none";
   });
 }
 
@@ -215,4 +226,14 @@ function saveSessionProgress() {
 
 function clearSessionProgress() {
   localStorage.removeItem("inProgressGymSession");
+}
+
+function editGymSession(match) {
+  gymSession = {
+    editingMatchId: match.id,
+    type: match.type,
+    sets: match.sets.map(s => ({ ...s }))
+  };
+  renderGymSets();
+  form.style.display = "flex";
 }
