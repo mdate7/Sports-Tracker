@@ -35,10 +35,13 @@ async function saveCourseProfile(courseName, parPerHole) {
 }
 
 function buildGolfSetup() {
+    const courseOptions = getDistinctFieldValues("golf", "courseName")
+    .map(v => `<option value="${v}"></option>`).join("");
   form.innerHTML = `
+      <datalist id="course-options">${courseOptions}</datalist>
     <div class="field">
       <label class="label" for="golf-course-name">Course Name</label>
-      <input type="text" id="golf-course-name" required>
+      <input type="text" id="golf-course-name" list="course-options" required>
     </div>
     <div class="field">
       <label class="label" for="golf-num-holes">Number of Holes</label>

@@ -106,25 +106,25 @@ if (row.sport === "gym" && row.gym_details) {
 }
 
 const commonFields = [
-  { key: "date", label: "Date", type: "date", summary: true },
+  { key: "date", label: "Date", type: "date", summary: true, default: todayISODate() },
   { key: "matchRating", label: "Rating", type: "number", summary: true },
   { key: "notes", label: "Notes", type: "text" }
 ];
 
 const sportFields = {
   football: [
-    { key: "opponent", label: "Opponent", type: "text", summary: true },
+    { key: "opponent", label: "Opponent", type: "text", summary: true, autocomplete: true },
     { key: "goalsFor", label: "Goals For", type: "number", summary: true },
     { key: "goalsAgainst", label: "Goals Against", type: "number", summary: true },
     { key: "goals", label: "Your Goals", type: "number", summary: true },
     { key: "assists", label: "Your Assists", type: "number" },
-    { key: "position", label: "Position Played", type: "text" },
+    { key: "position", label: "Position Played", type: "select-chips", options: ["GK", "RB", "CB", "LB", "CM", "CAM", "RW", "LW", "ST"] },
     { key: "minutesPlayed", label: "Minutes Played", type: "number" },
     { key: "momVotes", label: "MOM Votes", type: "number" },
     { key: "dodVotes", label: "DOD Votes", type: "number" }
   ],
   cricket: [
-    { key: "opponent", label: "Opponent", type: "text", summary: true },
+    { key: "opponent", label: "Opponent", type: "text", summary: true, autocomplete: true },
     { key: "runsScored", label: "Runs Scored", type: "number", summary: true },
     { key: "ballsFaced", label: "Balls Faced", type: "number" },
     { key: "battingNumber", label: "Batting Number", type: "number" },
@@ -136,11 +136,11 @@ const sportFields = {
     { key: "catches", label: "Catches", type: "number" }
   ],
   golf: [
-    { key: "courseName", label: "Course Name", type: "text", summary: true },
+    { key: "courseName", label: "Course Name", type: "text", summary: true, autocomplete: true },
     { key: "strokes", label: "Total Strokes", type: "number", summary: true },
     { key: "par", label: "Course Par", type: "number" },
     { key: "holesPlayed", label: "Holes Played", type: "number" },
-    { key: "playedWith", label: "Played With", type: "text", summary: true }
+    { key: "playedWith", label: "Played With", type: "text", summary: true, autocomplete: true }
   ],
   gym: [
     { key: "type", label: "Session Type", type: "text", summary: true },
@@ -165,6 +165,13 @@ let userProfile = null;
 
 function getFieldsForSport(sport) {
   return [...commonFields, ...sportFields[sport]];
+}
+
+function getDistinctFieldValues(sport, key) {
+  const values = matches
+    .filter(m => m.sport === sport && m[key])
+    .map(m => m[key]);
+  return [...new Set(values)];
 }
 
 function openSportForm(sport) {
@@ -278,23 +285,71 @@ function buildForm(sport, existingMatch = null) {
     label.className = "label";
     label.textContent = field.summary ? field.label : `${field.label} (optional)`;
     label.setAttribute("for", field.key);
+    wrapper.appendChild(label);                              // ← moved earlier (see note below)
 
-    const input = document.createElement("input");
-    input.type = field.type;
-    input.id = field.key;
-    input.required = !!field.summary;
-    if (existingMatch) {
-    input.value = existingMatch[field.key] ?? "";
-     } else if (field.type === "date") {
-    input.value = todayISODate();
-}
+    if (field.type === "select-chips") {                      // ← NEW branch entirely
+      const existingValue = existingMatch ? existingMatch[field.key] : "";
+      const chipsWrapper = document.createElement("div");
+      chipsWrapper.className = "chips";
 
-    wrapper.appendChild(label);
-    wrapper.appendChild(input);
+      field.options.forEach(option => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "chip";
+        chip.dataset.value = option;
+        chip.setAttribute("aria-pressed", option === existingValue ? "true" : "false");
+        chip.textContent = option;
+        chipsWrapper.appendChild(chip);
+      });
+
+      const hiddenInput = document.createElement("input");
+      hiddenInput.type = "hidden";
+      hiddenInput.id = field.key;
+      hiddenInput.value = existingValue || "";
+
+      chipsWrapper.addEventListener("click", (event) => {
+        const chip = event.target.closest(".chip");
+        if (!chip) return;
+        chipsWrapper.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", "false"));
+        chip.setAttribute("aria-pressed", "true");
+        hiddenInput.value = chip.dataset.value;
+      });
+
+      wrapper.appendChild(chipsWrapper);
+      wrapper.appendChild(hiddenInput);
+
+    } else {                                                   // ← old logic moved in here, mostly unchanged
+      const input = document.createElement("input");
+      input.type = field.type;
+      input.id = field.key;
+      input.required = !!field.summary;
+      if (existingMatch) {
+        input.value = existingMatch[field.key] ?? "";
+      } else if (field.type === "date") {
+        input.value = todayISODate();
+      }
+
+      if (field.autocomplete) {                                // ← NEW block
+        const listId = `${field.key}-list`;
+        input.setAttribute("list", listId);
+        const datalist = document.createElement("datalist");
+        datalist.id = listId;
+        getDistinctFieldValues(sport, field.key).forEach(val => {
+          const opt = document.createElement("option");
+          opt.value = val;
+          datalist.appendChild(opt);
+        });
+        wrapper.appendChild(input);
+        wrapper.appendChild(datalist);
+      } else {
+        wrapper.appendChild(input);                            // ← same as old, just nested one level deeper
+      }
+    }
+
     form.appendChild(wrapper);
   });
 
-  const button = document.createElement("button");
+  const button = document.createElement("button");             // ← completely unchanged from here down
   button.type = "submit";
   button.className = "btn";
   button.textContent = existingMatch ? "Save Changes" : "Add Activity";
