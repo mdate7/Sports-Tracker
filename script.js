@@ -633,6 +633,10 @@ function renderMatchDetailScreen() {
 
   const golfBreakdown = match.sport === "golf" ? renderGolfDetailHtml(match) : "";
   const title = match.opponent || match.courseName || "";
+  const editButton = match.sport === "golf"
+
+  ? `<button type="button" id="detail-edit-btn" class="btn btn--ghost btn--sm" style="margin-top:12px;">Edit round</button>`
+  : "";
 
   matchList.innerHTML = `
     <div class="card" data-sport="${match.sport}">
@@ -641,13 +645,21 @@ function renderMatchDetailScreen() {
       <p class="card-meta">${match.date || ""}</p>
       <div class="stats" style="margin-top:12px;">${statBlocks}</div>
       ${golfBreakdown}
+      ${editButton}
     </div>
   `;
+
 
   document.getElementById("detail-back-btn").addEventListener("click", () => {
     currentDetailMatchId = null;
     renderView();
   });
+
+    if (match.sport === "golf") {                                                   
+    document.getElementById("detail-edit-btn").addEventListener("click", () => {   
+      editGolfRound(match);                                                        
+    });                                                                            
+  }  
 }
 
 function renderView() {

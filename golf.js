@@ -186,7 +186,7 @@ function renderHoleStep() {
 
   if (holeIndex > 0) {
     document.getElementById("hole-back-btn").addEventListener("click", () => {
-      saveCurrentHoleInputs();
+if (!golfRound.editingMatchId) saveRoundProgress();
       saveRoundProgress();
       golfRound.holeIndex--;
       renderHoleStep();
@@ -195,7 +195,7 @@ function renderHoleStep() {
 
   document.getElementById("hole-next-btn").addEventListener("click", () => {
     saveCurrentHoleInputs();
-    saveRoundProgress();
+if (!golfRound.editingMatchId) saveRoundProgress();
     if (holeIndex === numHoles - 1) {
       finishGolfRound();
     } else {
@@ -244,9 +244,11 @@ function finishGolfRound() {
   const front = holes.slice(0, 9);
   const back = holes.slice(9);
 
+  const existing = golfRound.editingMatchId ? matches.find(m => m.id === golfRound.editingMatchId) : null;
+
   form.dataset.sport = "golf";
   form.innerHTML = `
-    <p class="label" style="text-align:center;">Round complete</p>
+    <p class="label" style="text-align:center;">${existing ? "Review round" : "Round complete"}</p>
     <p class="stat-value" style="text-align:center;font:var(--t-hero-xl);margin:4px 0 0;">${totalStrokes}</p>
     <p class="delta num ${diff > 0 ? "delta--neg" : ""}" style="text-align:center;">${scoreLabel}</p>
 
@@ -262,80 +264,95 @@ function finishGolfRound() {
 
     <div class="field" style="margin-top:20px;">
       <label class="label" for="golf-date">Date</label>
-      <input type="date" id="golf-date" value="${todayISODate()}" required>
+      <input type="date" id="golf-date" value="${existing ? existing.date : todayISODate()}" required>
     </div>
     <div class="field">
       <label class="label" for="golf-rating">Rating</label>
-      <input type="number" id="golf-rating" required>
+      <input type="number" id="golf-rating" value="${existing ? existing.matchRating ?? "" : ""}" required>
     </div>
     <div class="field">
       <label class="label" for="golf-played-with">Played With (optional)</label>
-      <input type="text" id="golf-played-with">
+      <input type="text" id="golf-played-with" value="${existing ? existing.playedWith ?? "" : ""}">
     </div>
     <div class="field">
       <label class="label" for="golf-notes">Notes (optional)</label>
-      <input type="text" id="golf-notes">
+      <input type="text" id="golf-notes" value="${existing ? existing.notes ?? "" : ""}">
     </div>
-    <button type="button" id="golf-save-btn" class="btn" style="margin-top:8px;">Save Round</button>
+    <button type="button" id="golf-save-btn" class="btn" style="margin-top:8px;">${existing ? "Save Changes" : "Save Round"}</button>
   `;
 
   document.getElementById("golf-save-btn").addEventListener("click", async () => {
-    const totalStrokes = golfRound.holes.reduce((sum, h) => sum + (h.strokes || 0), 0);
-    const totalPar = golfRound.holes.reduce((sum, h) => sum + (h.par || 0), 0);
-    const parPerHole = golfRound.holes.map(h => h.par);
-
-    await saveCourseProfile(golfRound.courseName, parPerHole);
-
     const userId = await ensureSignedIn();
     if (!userId) {
       alert("Couldn't verify your session — try again.");
       return;
     }
 
-    const { data: matchRow, error: matchError } = await supabaseClient
-      .from("matches")
-      .insert({
-        user_id: userId,
-        sport: "golf",
-        date: document.getElementById("golf-date").value,
-        match_rating: Number(document.getElementById("golf-rating").value),
-        notes: document.getElementById("golf-notes").value || null
-      })
-      .select()
-      .single();
+    const dateValue = document.getElementById("golf-date").value;
+    const ratingValue = Number(document.getElementById("golf-rating").value);
+    const playedWithValue = document.getElementById("golf-played-with").value || null;
+    const notesValue = document.getElementById("golf-notes").value || null;
+    const parPerHole = holes.map(h => h.par);
 
-    if (matchError) {
-      console.error("Failed to save round:", matchError);
-      alert("Something went wrong saving this round — check the console.");
-      return;
+    await saveCourseProfile(golfRound.courseName, parPerHole);
+
+    if (golfRound.editingMatchId) {
+      const matchId = golfRound.editingMatchId;
+
+      const { error: matchError } = await supabaseClient
+        .from("matches")
+        .update({ date: dateValue, match_rating: ratingValue, notes: notesValue })
+        .eq("id", matchId);
+      if (matchError) {
+        console.error("Failed to update round:", matchError);
+        alert("Something went wrong updating this round — check the console.");
+        return;
+      }
+
+      const { error: detailError } = await supabaseClient
+        .from("golf_details")
+        .update({ course_name: golfRound.courseName, played_with: playedWithValue, strokes: totalStrokes, par: totalPar, holes_played: golfRound.numHoles })
+        .eq("match_id", matchId);
+      if (detailError) console.error("Failed to update golf details:", detailError);
+
+      const { error: deleteHolesError } = await supabaseClient.from("golf_holes").delete().eq("match_id", matchId);
+      if (deleteHolesError) console.error("Failed to clear old holes:", deleteHolesError);
+
+      const holeRows = holes.map((h, index) => ({
+        match_id: matchId, hole_number: index + 1, par: h.par, strokes: h.strokes, putts: h.putts
+      }));
+      const { error: holesError } = await supabaseClient.from("golf_holes").insert(holeRows);
+      if (holesError) console.error("Failed to save updated holes:", holesError);
+
+    } else {
+      const { data: matchRow, error: matchError } = await supabaseClient
+        .from("matches")
+        .insert({ user_id: userId, sport: "golf", date: dateValue, match_rating: ratingValue, notes: notesValue })
+        .select()
+        .single();
+      if (matchError) {
+        console.error("Failed to save round:", matchError);
+        alert("Something went wrong saving this round — check the console.");
+        return;
+      }
+
+      const { error: detailError } = await supabaseClient
+        .from("golf_details")
+        .insert({ match_id: matchRow.id, course_name: golfRound.courseName, played_with: playedWithValue, strokes: totalStrokes, par: totalPar, holes_played: golfRound.numHoles });
+      if (detailError) console.error("Failed to save golf details:", detailError);
+
+      const holeRows = holes.map((h, index) => ({
+        match_id: matchRow.id, hole_number: index + 1, par: h.par, strokes: h.strokes, putts: h.putts
+      }));
+      const { error: holesError } = await supabaseClient.from("golf_holes").insert(holeRows);
+      if (holesError) console.error("Failed to save hole-by-hole data:", holesError);
+
+      clearRoundProgress();
     }
 
-    const { error: detailError } = await supabaseClient
-      .from("golf_details")
-      .insert({
-        match_id: matchRow.id,
-        course_name: golfRound.courseName,
-        played_with: document.getElementById("golf-played-with").value || null,
-        strokes: totalStrokes,
-        par: totalPar,
-        holes_played: golfRound.numHoles
-      });
-    if (detailError) console.error("Failed to save golf details:", detailError);
-
-    const holeRows = golfRound.holes.map((h, i) => ({
-      match_id: matchRow.id,
-      hole_number: i + 1,
-      par: h.par,
-      strokes: h.strokes,
-      putts: h.putts || null
-    }));
-
-    const { error: holesError } = await supabaseClient.from("golf_holes").insert(holeRows);
-    if (holesError) console.error("Failed to save hole-by-hole data:", holesError);
-
-    clearRoundProgress();
     golfRound = null;
     matches = await loadMatchesFromSupabase();
+    currentDetailMatchId = null;
     renderView();
     form.style.display = "none";
   });
@@ -347,5 +364,17 @@ function saveRoundProgress() {
 
 function clearRoundProgress() {
   localStorage.removeItem("inProgressGolfRound");
+}
+
+function editGolfRound(match) {
+  golfRound = {
+    editingMatchId: match.id,
+    courseName: match.courseName,
+    numHoles: match.holes.length,
+    holes: match.holes.map(h => ({ ...h })),
+    holeIndex: 0
+  };
+  renderHoleStep();
+  form.style.display = "flex";
 }
 
