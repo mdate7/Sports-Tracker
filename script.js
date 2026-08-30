@@ -368,6 +368,8 @@ form.addEventListener("submit", async function (event) {
 
   if (currentView !== "gym") return;
 
+  const sport = currentView;
+
   if (!gymSession || !gymSession.sets || gymSession.sets.length === 0) {
     alert("Add at least one set before saving your gym session.");
     return;
@@ -468,11 +470,11 @@ function renderProfileScreen() {
     }
     userProfile = data;
     statusEl.textContent = "Saved.";
+});
 
     document.getElementById("me-signout-btn").addEventListener("click", async () => {
   await supabaseClient.auth.signOut();
 });
-  });
 }
 
 function renderMatch(match) {
