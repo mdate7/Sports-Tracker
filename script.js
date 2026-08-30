@@ -3,6 +3,7 @@ const SUPABASE_KEY = "sb_publishable_Lie3FVMBz9Y4Buwumkyn6g_Q0JSMj4s"; // paste 
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./sw.js").then((registration) => {
@@ -1195,33 +1196,6 @@ async function deleteMatch(id) {
   renderView();
 }
 
-function exportMatches() {
-  const dataStr = JSON.stringify(matches, null, 2);
-  const blob = new Blob([dataStr], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `sports-tracker-backup-${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function importMatches(file) {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const imported = JSON.parse(e.target.result);
-      if (!Array.isArray(imported)) throw new Error("Not a valid backup file");
-      matches = imported; // or: matches.push(...imported) to merge instead of replace
-      localStorage.setItem("matches", JSON.stringify(matches));
-      renderView();
-    } catch (err) {
-      alert("Couldn't read that file — is it a valid export from this app?");
-    }
-  };
-  reader.readAsText(file);
-}
-
 const sportRail = document.getElementById("sport-rail");
 
 tabBar.addEventListener("click", (event) => {
@@ -1319,14 +1293,6 @@ form.addEventListener("submit", async function (event) {
   renderView();
   form.reset();
   form.style.display = "none";
-});
-
-document.getElementById("export-btn").addEventListener("click", exportMatches);
-document.getElementById("import-btn").addEventListener("click", () => {
-  document.getElementById("import-input").click();
-});
-document.getElementById("import-input").addEventListener("change", (e) => {
-  if (e.target.files[0]) importMatches(e.target.files[0]);
 });
 
 document.getElementById("auth-send-btn").addEventListener("click", async () => {
