@@ -118,22 +118,149 @@ form.innerHTML = `
   });
 }
 
+function getStrokeLabel(strokes, par) {
+  if (!strokes || !par) return "";
+  const diff = strokes - par;
+  if (diff <= -2) return { text: "EAGLE", cls: "" };
+  if (diff === -1) return { text: "BIRDIE", cls: "" };
+  if (diff === 0) return { text: "PAR", cls: "" };
+  if (diff === 1) return { text: `BOGEY · +${diff}`, cls: "delta--neg" };
+  return { text: `+${diff}`, cls: "delta--neg" };
+}
+
+function renderHoleStep() {
+  const { holeIndex, numHoles, holes } = golfRound;
+  const hole = holes[holeIndex];
+  form.dataset.sport = "golf";
+
+  const label = getStrokeLabel(hole.strokes, hole.par);
+
+  form.innerHTML = `
+    <p class="label" style="text-align:center;">Hole ${holeIndex + 1} of ${numHoles}</p>
+    <p class="stat-value" style="text-align:center;font:var(--t-hero);margin:2px 0;">Par ${hole.par || "?"}</p>
+
+    <div class="stepper stepper--lg" style="justify-content:center;gap:24px;margin:24px 0 6px;">
+      <button type="button" id="strokes-minus">−</button>
+      <output id="strokes-output">${hole.strokes || 0}</output>
+      <button type="button" class="plus" id="strokes-plus">+</button>
+    </div>
+    <p id="stroke-label" class="delta num ${label.cls}" style="text-align:center;">${label.text}</p>
+
+    <div style="display:flex;gap:8px;margin-top:20px;">
+      <div class="field" style="flex:1;">
+        <label class="label" for="hole-par">Par</label>
+        <input type="number" id="hole-par" value="${hole.par}">
+      </div>
+      <div class="field" style="flex:1;">
+        <label class="label" for="hole-putts">Putts</label>
+        <input type="number" id="hole-putts" value="${hole.putts}">
+      </div>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-top:16px;">
+      ${holeIndex > 0 ? `<button type="button" id="hole-back-btn" class="btn btn--ghost">Back</button>` : ""}
+      <button type="button" id="hole-next-btn" class="btn">${holeIndex === numHoles - 1 ? "Finish Round" : "Next Hole"}</button>
+    </div>
+  `;
+
+  function refreshLabel() {
+    const par = Number(document.getElementById("hole-par").value) || hole.par;
+    const strokes = Number(document.getElementById("strokes-output").textContent);
+    const l = getStrokeLabel(strokes, par);
+    const labelEl = document.getElementById("stroke-label");
+    labelEl.textContent = l.text;
+    labelEl.className = `delta num ${l.cls}`;
+  }
+
+  document.getElementById("strokes-minus").addEventListener("click", () => {
+    const output = document.getElementById("strokes-output");
+    output.textContent = Math.max(0, Number(output.textContent) - 1);
+    refreshLabel();
+  });
+  document.getElementById("strokes-plus").addEventListener("click", () => {
+    const output = document.getElementById("strokes-output");
+    output.textContent = Number(output.textContent) + 1;
+    refreshLabel();
+  });
+  document.getElementById("hole-par").addEventListener("input", refreshLabel);
+
+  if (holeIndex > 0) {
+    document.getElementById("hole-back-btn").addEventListener("click", () => {
+      saveCurrentHoleInputs();
+      saveRoundProgress();
+      golfRound.holeIndex--;
+      renderHoleStep();
+    });
+  }
+
+  document.getElementById("hole-next-btn").addEventListener("click", () => {
+    saveCurrentHoleInputs();
+    saveRoundProgress();
+    if (holeIndex === numHoles - 1) {
+      finishGolfRound();
+    } else {
+      golfRound.holeIndex++;
+      renderHoleStep();
+    }
+  });
+}
+
 function saveCurrentHoleInputs() {
   const hole = golfRound.holes[golfRound.holeIndex];
   hole.par = document.getElementById("hole-par").value !== ""
     ? Number(document.getElementById("hole-par").value)
     : null;
-  hole.strokes = document.getElementById("hole-strokes").value !== ""
-    ? Number(document.getElementById("hole-strokes").value)
-    : null;
+  hole.strokes = Number(document.getElementById("strokes-output").textContent) || null;
   hole.putts = document.getElementById("hole-putts").value !== ""
     ? Number(document.getElementById("hole-putts").value)
     : null;
 }
 
+function getHoleState(hole) {
+  if (!hole.strokes || !hole.par) return "par";
+  const diff = hole.strokes - hole.par;
+  if (diff < 0) return "under";
+  if (diff === 0) return "par";
+  if (diff === 1) return "over";
+  return "worse";
+}
+
+function buildStrip(holes) {
+  return holes.map(h => `<i data-v="${getHoleState(h)}"></i>`).join("");
+}
+
 function finishGolfRound() {
+  const holes = golfRound.holes;
+  const totalStrokes = holes.reduce((sum, h) => sum + (h.strokes || 0), 0);
+  const totalPar = holes.reduce((sum, h) => sum + (h.par || 0), 0);
+  const diff = totalStrokes - totalPar;
+  const scoreLabel = diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
+
+  const totalPutts = holes.reduce((sum, h) => sum + (h.putts || 0), 0);
+  const birdies = holes.filter(h => h.strokes && h.par && h.strokes - h.par < 0).length;
+  const pars = holes.filter(h => h.strokes && h.par && h.strokes - h.par === 0).length;
+  const bogeysPlus = holes.filter(h => h.strokes && h.par && h.strokes - h.par > 0).length;
+
+  const front = holes.slice(0, 9);
+  const back = holes.slice(9);
+
+  form.dataset.sport = "golf";
   form.innerHTML = `
-    <div class="field">
+    <p class="label" style="text-align:center;">Round complete</p>
+    <p class="stat-value" style="text-align:center;font:var(--t-hero-xl);margin:4px 0 0;">${totalStrokes}</p>
+    <p class="delta num ${diff > 0 ? "delta--neg" : ""}" style="text-align:center;">${scoreLabel}</p>
+
+    ${front.length ? `<p class="label" style="margin-top:20px;">Front ${front.length}</p><div class="strip">${buildStrip(front)}</div>` : ""}
+    ${back.length ? `<p class="label" style="margin-top:12px;">Back ${back.length}</p><div class="strip">${buildStrip(back)}</div>` : ""}
+
+    <div class="stats" style="margin-top:20px;">
+      <div><span class="stat-value num">${birdies}</span><p class="label">Birdies</p></div>
+      <div><span class="stat-value num">${pars}</span><p class="label">Pars</p></div>
+      <div><span class="stat-value num">${bogeysPlus}</span><p class="label">Bogeys+</p></div>
+      <div><span class="stat-value num">${totalPutts}</span><p class="label">Putts</p></div>
+    </div>
+
+    <div class="field" style="margin-top:20px;">
       <label class="label" for="golf-date">Date</label>
       <input type="date" id="golf-date" value="${todayISODate()}" required>
     </div>
@@ -149,7 +276,7 @@ function finishGolfRound() {
       <label class="label" for="golf-notes">Notes (optional)</label>
       <input type="text" id="golf-notes">
     </div>
-    <button type="button" id="golf-save-btn" class="btn">Save Round</button>
+    <button type="button" id="golf-save-btn" class="btn" style="margin-top:8px;">Save Round</button>
   `;
 
   document.getElementById("golf-save-btn").addEventListener("click", async () => {
