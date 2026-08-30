@@ -17,7 +17,6 @@ function generateInviteCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
-
 async function loadTeamDetail(teamId) {
   const { data: team, error: teamError } = await supabaseClient
     .from("teams")
@@ -30,11 +29,17 @@ async function loadTeamDetail(teamId) {
     .select("user_id, role, profiles(display_name)")
     .eq("team_id", teamId);
 
-  if (teamError || membersError) {
-    console.error("Failed to load team:", teamError || membersError);
+  const { data: fixtures, error: fixturesError } = await supabaseClient
+    .from("fixtures")
+    .select("*")
+    .eq("team_id", teamId)
+    .order("date", { ascending: false });
+
+  if (teamError || membersError || fixturesError) {
+    console.error("Failed to load team:", teamError || membersError || fixturesError);
     return null;
   }
-  return { ...team, members };
+  return { ...team, members, fixtures: fixtures || [] };
 }
 
 async function renderTeamDetail() {
@@ -42,20 +47,45 @@ async function renderTeamDetail() {
   if (!team) return;
 
   const userId = await ensureSignedIn();
-const membersHtml = team.members.map(m => `
-  <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
-    <span>${m.profiles?.display_name || "Unnamed player"}</span>
-    <span class="label">${m.role}</span>
-  </div>
-`).join("");
+  const membersHtml = team.members.map(m => `
+    <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
+      <span>${m.profiles?.display_name || "Unnamed player"}</span>
+      <span class="label">${m.role}</span>
+    </div>
+  `).join("");
+
+  const today = todayISODate();
+  const upcoming = team.fixtures.filter(f => f.date >= today);
+  const past = team.fixtures.filter(f => f.date < today);
+
+  const fixtureRow = (f) => `
+    <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
+      <div>
+        <p class="stat-value" style="font-size:0.9rem;">${f.opponent} (${f.is_home ? "H" : "A"})</p>
+        <p class="label" style="margin-top:2px;">${f.competition || ""}</p>
+      </div>
+      <span class="label">${f.date}</span>
+    </div>
+  `;
 
   matchList.innerHTML = `
     <div class="card" data-sport="${team.sport}">
       <p class="stat-value">${team.name}</p>
       <p class="label" style="margin-top:4px;">${sportNames[team.sport]} · Invite code: ${team.invite_code}</p>
     </div>
+
+    <p class="label" style="margin-top:16px;">Upcoming fixtures</p>
+    <div class="card">${upcoming.length ? upcoming.map(fixtureRow).join("") : `<p class="empty-state">None scheduled.</p>`}</div>
+    <button type="button" id="add-fixture-btn" class="btn btn--ghost btn--sm" style="margin-top:8px;">+ Add fixture</button>
+
+    ${past.length ? `
+      <p class="label" style="margin-top:16px;">Past fixtures</p>
+      <div class="card">${past.map(fixtureRow).join("")}</div>
+    ` : ""}
+
     <p class="label" style="margin-top:16px;">Members (${team.members.length})</p>
     <div class="card">${membersHtml}</div>
+
     <button type="button" id="team-back-btn" class="btn btn--ghost" style="margin-top:16px;">Back to teams</button>
     <button type="button" id="team-leave-btn" class="btn btn--ghost" style="margin-top:10px;">Leave team</button>
   `;
@@ -82,6 +112,74 @@ const membersHtml = team.members.map(m => `
     currentTeamId = null;
     userTeams = await loadUserTeams();
     renderTeamsScreen();
+  });
+
+  document.getElementById("add-fixture-btn").addEventListener("click", () => {
+    renderAddFixtureForm(team);
+  });
+}
+
+function renderAddFixtureForm(team) {
+  matchList.innerHTML = `
+    <div class="card" data-sport="${team.sport}">
+      <div class="field">
+        <label class="label" for="fixture-opponent">Opponent</label>
+        <input type="text" id="fixture-opponent">
+      </div>
+      <div class="field">
+        <label class="label" for="fixture-date">Date</label>
+        <input type="date" id="fixture-date" value="${todayISODate()}">
+      </div>
+      <p class="label" style="margin-top:12px;">Venue</p>
+      <div class="chips" id="fixture-venue-chips">
+        <button type="button" class="chip" data-venue="home" aria-pressed="true">Home</button>
+        <button type="button" class="chip" data-venue="away" aria-pressed="false">Away</button>
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label class="label" for="fixture-competition">Competition (optional)</label>
+        <input type="text" id="fixture-competition">
+      </div>
+      <button type="button" id="fixture-save-btn" class="btn" style="margin-top:16px;">Save fixture</button>
+      <button type="button" id="fixture-cancel-btn" class="btn btn--ghost" style="margin-top:10px;">Cancel</button>
+      <p id="fixture-status" class="tiny" style="color:var(--muted);margin-top:10px;"></p>
+    </div>
+  `;
+
+  document.getElementById("fixture-cancel-btn").addEventListener("click", () => renderTeamDetail());
+
+  document.getElementById("fixture-venue-chips").addEventListener("click", (event) => {
+    const chip = event.target.closest(".chip");
+    if (!chip) return;
+    document.querySelectorAll("#fixture-venue-chips .chip").forEach(c => c.setAttribute("aria-pressed", "false"));
+    chip.setAttribute("aria-pressed", "true");
+  });
+
+  document.getElementById("fixture-save-btn").addEventListener("click", async () => {
+    const opponent = document.getElementById("fixture-opponent").value.trim();
+    const date = document.getElementById("fixture-date").value;
+    const isHome = document.querySelector('#fixture-venue-chips .chip[aria-pressed="true"]').dataset.venue === "home";
+    const competition = document.getElementById("fixture-competition").value.trim() || null;
+    const statusEl = document.getElementById("fixture-status");
+
+    if (!opponent || !date) {
+      statusEl.textContent = "Opponent and date are required.";
+      return;
+    }
+
+    const userId = await ensureSignedIn();
+    if (!userId) return;
+
+    const { error } = await supabaseClient
+      .from("fixtures")
+      .insert({ team_id: team.id, opponent, date, is_home: isHome, competition, created_by: userId });
+
+    if (error) {
+      console.error("Failed to save fixture:", error);
+      statusEl.textContent = "Something went wrong — try again.";
+      return;
+    }
+
+    renderTeamDetail();
   });
 }
 
