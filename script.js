@@ -160,6 +160,7 @@ const viewTitle = document.getElementById("view-title");
 let currentMode = "feed"; // "feed" | "insights" | "teams" | "me"
 let currentView = "all";  // sport filter, only meaningful while currentMode === "feed"
 let matches = [];
+let currentDetailMatchId = null;
 let editingId = null;
 let userProfile = null;
 
@@ -261,6 +262,28 @@ function todayISODate() {
   const offset = d.getTimezoneOffset();
   const local = new Date(d.getTime() - offset * 60000);
   return local.toISOString().slice(0, 10);
+}
+
+function renderGolfDetailHtml(match) {
+  if (!match.holes || match.holes.length === 0) return "";
+  const birdies = match.holes.filter(h => h.strokes && h.par && h.strokes - h.par < 0).length;
+  const pars = match.holes.filter(h => h.strokes && h.par && h.strokes - h.par === 0).length;
+  const bogeysPlus = match.holes.filter(h => h.strokes && h.par && h.strokes - h.par > 0).length;
+  const totalPutts = match.holes.reduce((sum, h) => sum + (h.putts || 0), 0);
+
+  const front = match.holes.slice(0, 9);
+  const back = match.holes.slice(9);
+
+  return `
+    ${front.length ? `<p class="label" style="margin-top:10px;">Front ${front.length}</p><div class="strip">${buildStrip(front)}</div>` : ""}
+    ${back.length ? `<p class="label" style="margin-top:8px;">Back ${back.length}</p><div class="strip">${buildStrip(back)}</div>` : ""}
+    <div class="stats" style="margin-top:12px;">
+      <div><span class="stat-value num">${birdies}</span><p class="label">Birdies</p></div>
+      <div><span class="stat-value num">${pars}</span><p class="label">Pars</p></div>
+      <div><span class="stat-value num">${bogeysPlus}</span><p class="label">Bogeys+</p></div>
+      <div><span class="stat-value num">${totalPutts}</span><p class="label">Putts</p></div>
+    </div>
+  `;
 }
 
 function getGolfScoreVsPar(match) {
@@ -487,6 +510,7 @@ function renderMatch(match) {
   `).join("");
 
   const detailRows = detailFields.map(f => `<li>${f.label}: ${match[f.key]}</li>`).join("");
+  const golfBreakdown = match.sport === "golf" ? renderGolfDetailHtml(match) : "";
 
   let hero = "";
   if (match.sport === "football") {
@@ -520,12 +544,20 @@ function renderMatch(match) {
     </div>
   `;
 
-  const toggleBtn = card.querySelector(".toggle-details-btn");
-  const detailsList = card.querySelector(".card-details");
+const toggleBtn = card.querySelector(".toggle-details-btn");
+const detailsList = card.querySelector(".card-details");
+
+if (match.sport === "golf") {
+  toggleBtn.addEventListener("click", () => {
+    currentDetailMatchId = match.id;
+    renderMatchDetailScreen();
+  });
+} else {
   toggleBtn.addEventListener("click", () => {
     const isExpanded = detailsList.classList.toggle("expanded");
     toggleBtn.textContent = isExpanded ? "Hide details" : "View details";
   });
+}
 
   card.querySelector(".edit-btn").addEventListener("click", () => startEdit(match.id));
   card.querySelector(".delete-btn").addEventListener("click", () => deleteMatch(match.id));
@@ -583,6 +615,39 @@ function renderList(list) {
     return;
   }
   sorted.forEach(renderMatch);
+}
+
+function renderMatchDetailScreen() {
+  const match = matches.find(m => m.id === currentDetailMatchId);
+  if (!match) { renderView(); return; }
+
+  const fields = getFieldsForSport(match.sport);
+  const summaryFields = fields.filter(f => f.summary);
+
+  const statBlocks = summaryFields.map(f => `
+    <div>
+      <span class="stat-value num">${match[f.key]}</span>
+      <p class="label">${f.label}</p>
+    </div>
+  `).join("");
+
+  const golfBreakdown = match.sport === "golf" ? renderGolfDetailHtml(match) : "";
+  const title = match.opponent || match.courseName || "";
+
+  matchList.innerHTML = `
+    <div class="card" data-sport="${match.sport}">
+      <button type="button" id="detail-back-btn" class="btn btn--ghost btn--sm" style="margin-bottom:12px;">← Back</button>
+      <p class="eyebrow">${sportNames[match.sport]} · ${title}</p>
+      <p class="card-meta">${match.date || ""}</p>
+      <div class="stats" style="margin-top:12px;">${statBlocks}</div>
+      ${golfBreakdown}
+    </div>
+  `;
+
+  document.getElementById("detail-back-btn").addEventListener("click", () => {
+    currentDetailMatchId = null;
+    renderView();
+  });
 }
 
 function renderView() {
