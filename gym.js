@@ -30,16 +30,30 @@ function buildGymSetup() {
   });
 }
 
+function getDistinctGymValues(key) {
+  const values = matches
+    .filter(m => m.sport === "gym")
+    .flatMap(m => m.sets || [])
+    .map(s => s[key])
+    .filter(Boolean);
+  return [...new Set(values)];
+}
+
 function renderGymSets() {
+  const exerciseOptions = getDistinctGymValues("exercise")
+    .map(v => `<option value="${v}"></option>`).join("");
+  const muscleOptions = getDistinctGymValues("muscleGroup")
+    .map(v => `<option value="${v}"></option>`).join("");
+
   const setsHtml = gymSession.sets.map((set, index) => `
     <div class="card" style="margin-bottom:10px;">
       <div class="field">
         <label class="label" for="set-exercise-${index}">Exercise</label>
-        <input type="text" id="set-exercise-${index}" value="${set.exercise}">
+        <input type="text" id="set-exercise-${index}" value="${set.exercise}" list="exercise-options">
       </div>
       <div class="field">
         <label class="label" for="set-muscle-${index}">Muscle group</label>
-        <input type="text" id="set-muscle-${index}" value="${set.muscleGroup}">
+        <input type="text" id="set-muscle-${index}" value="${set.muscleGroup}" list="muscle-options">
       </div>
       <div style="display:flex; gap:8px;">
         <div class="field" style="flex:1;">
@@ -60,6 +74,8 @@ function renderGymSets() {
   `).join("");
 
   form.innerHTML = `
+    <datalist id="exercise-options">${exerciseOptions}</datalist>
+    <datalist id="muscle-options">${muscleOptions}</datalist>
     <p class="label">${sportNames.gym} · ${gymSession.type}</p>
     <div id="gym-sets-list">${setsHtml}</div>
     <button type="button" id="gym-add-set-btn" class="btn btn--ghost" style="margin-top:8px;">+ Add set</button>
@@ -86,6 +102,7 @@ function renderGymSets() {
     saveGymSetInputs();
     finishGymSession(); // build this next, mirroring finishGolfRound
   });
+  // ...rest of the function (listeners) stays exactly as it is
 }
 
 function saveGymSetInputs() {
