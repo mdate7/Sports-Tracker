@@ -55,7 +55,8 @@ function flattenMatchRow(row) {
       position: d.position,
       minutesPlayed: d.minutes_played,
       momVotes: d.mom_votes,
-      dodVotes: d.dod_votes
+      dodVotes: d.dod_votes,
+      fixtureId: d.fixture_id
     };
   }
 
@@ -203,7 +204,9 @@ function openSportForm(sport) {
         }
     } else {
         buildGymSetup();
-    }   
+    } 
+    } else if (sport === "football") {
+  buildFootballForm();  
   } else {
     buildForm(sport);
   }
@@ -237,7 +240,8 @@ function buildDetailPayload(sport, values) {
       position: values.position,
       minutes_played: values.minutesPlayed,
       mom_votes: values.momVotes,
-      dod_votes: values.dodVotes
+      dod_votes: values.dodVotes,
+      fixture_id: values.fixtureId || null
     };
   }
   if (sport === "cricket") {
@@ -417,6 +421,7 @@ form.addEventListener("submit", async function (event) {
   event.preventDefault();
 
   if (currentView !== "gym") return;
+  if (currentView === "football") return;
 
   const sport = currentView;
 
