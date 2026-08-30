@@ -1120,11 +1120,53 @@ function renderMatch(match) {
   matchList.appendChild(card);
 }
 
+function renderInProgressCards() {
+  let html = "";
+
+  const golfSaved = localStorage.getItem("inProgressGolfRound");
+  if (golfSaved && (currentView === "all" || currentView === "golf")) {
+    const round = JSON.parse(golfSaved);
+    html += `
+      <div class="card" data-sport="golf" data-resume="golf" style="cursor:pointer;">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Golf · ${round.courseName || "In progress"}</p>
+            <p class="card-meta">Hole ${round.holeIndex + 1} of ${round.numHoles}</p>
+          </div>
+          <span class="chip" aria-pressed="true">Resume</span>
+        </div>
+      </div>
+    `;
+  }
+
+  const gymSaved = localStorage.getItem("inProgressGymSession");
+  if (gymSaved && (currentView === "all" || currentView === "gym")) {
+    const session = JSON.parse(gymSaved);
+    html += `
+      <div class="card" data-sport="gym" data-resume="gym" style="cursor:pointer;">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Gym · ${session.type || "In progress"}</p>
+            <p class="card-meta">${session.sets.length} set${session.sets.length === 1 ? "" : "s"} logged</p>
+          </div>
+          <span class="chip" aria-pressed="true">Resume</span>
+        </div>
+      </div>
+    `;
+  }
+
+  return html;
+}
+
 function renderList(list) {
-const sorted = [...list].sort((a, b) => new Date(b.date) - new Date(a.date));
-  matchList.innerHTML = "";
+  const sorted = [...list].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const inProgressHtml = renderInProgressCards();
+  matchList.innerHTML = inProgressHtml;
+
   if (list.length === 0) {
-    matchList.innerHTML = `<p class="empty-state">No activities yet.</p>`;
+    if (!inProgressHtml) {
+      matchList.innerHTML = `<p class="empty-state">No activities yet.</p>`;
+    }
     return;
   }
   sorted.forEach(renderMatch);
@@ -1181,6 +1223,30 @@ function setView(view) {
   });
   renderView();
 }
+
+function resumeInProgress(sport) {
+  if (sport === "golf") {
+    const saved = localStorage.getItem("inProgressGolfRound");
+    if (!saved) return;
+    golfRound = JSON.parse(saved);
+    setView("golf");
+    renderHoleStep();
+    form.style.display = "flex";
+  } else if (sport === "gym") {
+    const saved = localStorage.getItem("inProgressGymSession");
+    if (!saved) return;
+    gymSession = JSON.parse(saved);
+    setView("gym");
+    renderGymSets();
+    form.style.display = "flex";
+  }
+}
+
+matchList.addEventListener("click", (event) => {
+  const resumeCard = event.target.closest("[data-resume]");
+  if (!resumeCard) return;
+  resumeInProgress(resumeCard.dataset.resume);
+});
 
 function startEdit(id) {
   const match = matches.find(m => m.id === id);
