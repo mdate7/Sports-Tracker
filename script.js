@@ -404,6 +404,13 @@ function buildDetailPayload(sport, values) {
   return null; // golf is handled separately below, since it also needs golf_holes rows
 }
 
+function todayISODate() {
+  const d = new Date();
+  const offset = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - offset * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
 function getGolfScoreVsPar(match) {
   const diff = match.strokes - match.par;
   if (diff === 0) return "E";
@@ -479,7 +486,11 @@ function buildForm(sport, existingMatch = null) {
     input.type = field.type;
     input.id = field.key;
     input.required = !!field.summary;
-    if (existingMatch) input.value = existingMatch[field.key] ?? "";
+    if (existingMatch) {
+    input.value = existingMatch[field.key] ?? "";
+     } else if (field.type === "date") {
+    input.value = todayISODate();
+}
 
     wrapper.appendChild(label);
     wrapper.appendChild(input);
@@ -684,7 +695,7 @@ function finishGymSession() {
   form.innerHTML = `
     <div class="field">
       <label class="label" for="gym-date">Date</label>
-      <input type="date" id="gym-date" required>
+      <input type="date" id="gym-date" value="${todayISODate()}" required>
     </div>
     <div class="field">
       <label class="label" for="gym-rating">Rating</label>
@@ -752,7 +763,7 @@ function finishGolfRound() {
   form.innerHTML = `
     <div class="field">
       <label class="label" for="golf-date">Date</label>
-      <input type="date" id="golf-date" required>
+      <input type="date" id="golf-date" value="${todayISODate()}" required>
     </div>
     <div class="field">
       <label class="label" for="golf-rating">Rating</label>
