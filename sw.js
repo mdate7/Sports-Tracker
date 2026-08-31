@@ -1,4 +1,4 @@
-const CACHE_NAME = "clubhouse-v4";
+const CACHE_NAME = "clubhouse-v5";
 const CORE_ASSETS = [
   "./",
   "./index.html",

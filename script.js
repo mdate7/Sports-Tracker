@@ -167,6 +167,62 @@ let userProfile = null;
 let pendingSelections = [];
 let activeSelectionId = null;
 
+let wakeLock = null;
+
+async function requestWakeLock() {
+  try {
+    if ("wakeLock" in navigator) {
+      wakeLock = await navigator.wakeLock.request("screen");
+    }
+  } catch (err) {
+    console.error("Wake lock request failed:", err);
+  }
+}
+
+function releaseWakeLock() {
+  if (wakeLock) {
+    wakeLock.release();
+    wakeLock = null;
+  }
+}
+
+document.addEventListener("visibilitychange", async () => {
+  if (wakeLock !== null && document.visibilityState === "visible") {
+    await requestWakeLock();
+  }
+});
+
+function openScreen(title) {
+  document.querySelector(".app-header").style.display = "none";
+  sportRail.style.display = "none";
+  matchList.style.display = "none";
+  tabBar.style.display = "none";
+  document.getElementById("screen-header").style.display = "flex";
+  document.getElementById("screen-title").textContent = title;
+  form.style.display = "flex";
+  requestWakeLock();
+}
+
+function closeScreen() {
+  document.querySelector(".app-header").style.display = "";
+  matchList.style.display = "";
+  tabBar.style.display = "";
+  document.getElementById("screen-header").style.display = "none";
+  form.style.display = "none";
+  if (currentMode === "feed") sportRail.style.display = "flex";
+  releaseWakeLock();
+}
+
+function closeEntryScreen() {
+  editingId = null;
+  golfRound = null;
+  gymSession = null;
+  activeSelectionId = null;
+  closeScreen();
+}
+
+document.getElementById("screen-back-btn").addEventListener("click", closeEntryScreen);
+
 function getFieldsForSport(sport) {
   return [...commonFields, ...sportFields[sport]];
 }
@@ -212,7 +268,6 @@ function openSportForm(sport) {
   } else {
     buildForm(sport);
   }
-  form.style.display = "flex";
 }
 
 function buildSportPicker() {
@@ -422,7 +477,7 @@ function buildForm(sport, existingMatch = null) {
 form.addEventListener("submit", async function (event) {
   event.preventDefault();
 
-  if (currentView !== "gym") return;
+  if (currentView === "gym") return;
   if (currentView === "football") return;
 
   const sport = currentView;
@@ -858,13 +913,10 @@ sportRail.addEventListener("click", (event) => {
 
 addMatchBtn.addEventListener("click", () => {
   const isOpen = form.style.display === "flex";
-  if (isOpen) {
-    form.style.display = "none";
-    editingId = null;
-    golfRound = null;
-    activeSelectionId = null;
-    return;
-  }
+if (isOpen) {
+  closeEntryScreen();
+  return;
+}
 
   if (currentMode !== "feed") setMode("feed");
 
@@ -985,6 +1037,7 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
 });
 
 async function init() {
+  console.log("FRESH CODE CHECK 999");
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {
     await handleSignedIn(session.user.id);

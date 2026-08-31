@@ -2,11 +2,14 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
   const footballTeams = await getFootballTeamsForUser();
   const fixtures = await getUpcomingFixturesForTeams(footballTeams.map(t => t.id));
 
+  const draft = !existingMatch ? JSON.parse(localStorage.getItem("draftFootballMatch") || "null") : null;
+
+  openScreen(existingMatch ? "Edit match" : "Log a match");
   form.dataset.sport = "football";
-  let goalsFor = existingMatch?.goalsFor ?? 0;
-  let goalsAgainst = existingMatch?.goalsAgainst ?? 0;
-  let yourGoals = existingMatch?.goals ?? 0;
-  let yourAssists = existingMatch?.assists ?? 0;
+  let goalsFor = existingMatch?.goalsFor ?? draft?.goalsFor ?? 0;
+  let goalsAgainst = existingMatch?.goalsAgainst ?? draft?.goalsAgainst ?? 0;
+  let yourGoals = existingMatch?.goals ?? draft?.yourGoals ?? 0;
+  let yourAssists = existingMatch?.assists ?? draft?.yourAssists ?? 0;
   const positions = ["GK", "RB", "CB", "LB", "CM", "CAM", "RW", "LW", "ST"];
 
   form.innerHTML = `
@@ -35,7 +38,7 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
 
     <p class="label" style="margin-top:16px;">Position</p>
     <div class="chips" id="position-chips">
-      ${positions.map(p => `<button type="button" class="chip" data-position="${p}" aria-pressed="${existingMatch?.position === p}">${p}</button>`).join("")}
+      ${positions.map(p => `<button type="button" class="chip" data-position="${p}" aria-pressed="${existingMatch?.position === p || draft?.position === p ? "true" : "false"}">${p}</button>`).join("")}
     </div>
 
     <p class="label" style="margin-top:16px;">Your game</p>
@@ -60,15 +63,15 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
 
     <div class="field" style="margin-top:16px;">
       <label class="label" for="date">Date</label>
-      <input type="date" id="date" value="${existingMatch ? existingMatch.date : (prefillFixture ? prefillFixture.date : todayISODate())}" required>
+      <input type="date" id="date" value="${existingMatch ? existingMatch.date : (draft?.date || (prefillFixture ? prefillFixture.date : todayISODate()))}" required>
     </div>
     <div class="field">
       <label class="label" for="opponent">Opponent</label>
-      <input type="text" id="opponent" value="${existingMatch?.opponent || prefillFixture?.opponent || ""}" required>
+      <input type="text" id="opponent" value="${existingMatch?.opponent || draft?.opponent || (prefillFixture?.opponent) || ""}" required>
     </div>
     <div class="field">
       <label class="label" for="notes">Notes (optional)</label>
-      <input type="text" id="notes" value="${existingMatch?.notes || ""}">
+      <input type="text" id="notes" value="${existingMatch?.notes || draft?.notes || ""}">
     </div>
 
         ${fixtures.length > 0 ? `
@@ -76,7 +79,7 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
         <label class="label" for="fixture-select">Attach to fixture (optional)</label>
         <select id="fixture-select">
           <option value="">None</option>
-          ${fixtures.map(f => `<option value="${f.id}" ${(existingMatch?.fixtureId === f.id) || (prefillFixture?.id === f.id) ? "selected" : ""}>${f.opponent} · ${f.date}</option>`).join("")}
+          ${fixtures.map(f => `<option value="${f.id}" ${(existingMatch?.fixtureId === f.id) || draft?.fixtureId === f.id || (prefillFixture?.id === f.id) ? "selected" : ""}>${f.opponent} · ${f.date}</option>`).join("")}
         </select>
       </div>
     ` : ""}
@@ -135,6 +138,7 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
         position: payload.position, fixture_id: payload.fixture_id
       });
     if (detailError) console.error("Failed to save football details:", detailError);
+    clearFootballDraft();
 
     if (activeSelectionId) {
     const { error: linkError } = await supabaseClient
@@ -177,17 +181,22 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
     });
   }
 
-  wireStepper("goals-for-minus", "goals-for-plus", "goals-for-output", refreshBadge);
-  wireStepper("goals-against-minus", "goals-against-plus", "goals-against-output", refreshBadge);
-  wireStepper("your-goals-minus", "your-goals-plus", "your-goals-output");
-  wireStepper("your-assists-minus", "your-assists-plus", "your-assists-output");
+wireStepper("goals-for-minus", "goals-for-plus", "goals-for-output", () => { refreshBadge(); saveFootballDraft(); });
+wireStepper("goals-against-minus", "goals-against-plus", "goals-against-output", () => { refreshBadge(); saveFootballDraft(); });
+wireStepper("your-goals-minus", "your-goals-plus", "your-goals-output", saveFootballDraft);
+wireStepper("your-assists-minus", "your-assists-plus", "your-assists-output", saveFootballDraft);
 
-  document.getElementById("position-chips").addEventListener("click", (event) => {
-    const chip = event.target.closest(".chip");
-    if (!chip) return;
-    document.querySelectorAll("#position-chips .chip").forEach(c => c.setAttribute("aria-pressed", "false"));
-    chip.setAttribute("aria-pressed", "true");
-  });
+document.getElementById("position-chips").addEventListener("click", (event) => {
+  const chip = event.target.closest(".chip");
+  if (!chip) return;
+  document.querySelectorAll("#position-chips .chip").forEach(c => c.setAttribute("aria-pressed", "false"));
+  chip.setAttribute("aria-pressed", "true");
+  saveFootballDraft();
+});
+
+["date", "opponent", "notes", "fixture-select"].forEach(id => {
+  document.getElementById(id)?.addEventListener("input", saveFootballDraft);
+});
 
   refreshBadge();
 }
@@ -212,4 +221,23 @@ async function getUpcomingFixturesForTeams(teamIds) {
     .order("date", { ascending: false });
   if (error) { console.error("Failed to load fixtures:", error); return []; }
   return data;
+}
+
+function saveFootballDraft() {
+  const draft = {
+    date: document.getElementById("date")?.value,
+    opponent: document.getElementById("opponent")?.value,
+    notes: document.getElementById("notes")?.value,
+    goalsFor: document.getElementById("goals-for-output")?.textContent,
+    goalsAgainst: document.getElementById("goals-against-output")?.textContent,
+    yourGoals: document.getElementById("your-goals-output")?.textContent,
+    yourAssists: document.getElementById("your-assists-output")?.textContent,
+    position: document.querySelector('#position-chips .chip[aria-pressed="true"]')?.dataset.position,
+    fixtureId: document.getElementById("fixture-select")?.value
+  };
+  localStorage.setItem("draftFootballMatch", JSON.stringify(draft));
+}
+
+function clearFootballDraft() {
+  localStorage.removeItem("draftFootballMatch");
 }
