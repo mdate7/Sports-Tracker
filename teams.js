@@ -59,14 +59,17 @@ async function renderTeamDetail() {
   const past = team.fixtures.filter(f => f.date < today);
 
   const fixtureRow = (f) => `
-    <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
+  <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+    <div style="display:flex;justify-content:space-between;">
       <div>
         <p class="stat-value" style="font-size:0.9rem;">${f.opponent} (${f.is_home ? "H" : "A"})</p>
         <p class="label" style="margin-top:2px;">${f.competition || ""}</p>
       </div>
       <span class="label">${f.date}</span>
     </div>
-  `;
+    <button type="button" class="btn btn--ghost btn--sm" data-team-sheet-fixture="${f.id}" style="margin-top:8px;">Team sheet</button>
+  </div>
+`;
 
   matchList.innerHTML = `
     <div class="card" data-sport="${team.sport}">
@@ -117,6 +120,14 @@ async function renderTeamDetail() {
   document.getElementById("add-fixture-btn").addEventListener("click", () => {
     renderAddFixtureForm(team);
   });
+
+  matchList.addEventListener("click", async function fixtureSheetClick(event) {
+  const btn = event.target.closest("[data-team-sheet-fixture]");
+  if (!btn) return;
+  const fixture = team.fixtures.find(f => f.id === btn.dataset.teamSheetFixture);
+  if (fixture) await renderTeamSheetScreen(fixture, team);
+}, { once: true });
+
 }
 
 function renderAddFixtureForm(team) {
@@ -343,4 +354,96 @@ function renderJoinTeamForm() {
     teamsSubView = "list";
     renderTeamsScreen();
   });
+}
+
+async function loadOrCreateTeamSheet(fixtureId) {
+  const { data: existing } = await supabaseClient
+    .from("team_sheets")
+    .select("*")
+    .eq("fixture_id", fixtureId)
+    .maybeSingle();
+
+  if (existing) return existing;
+
+  const userId = await ensureSignedIn();
+  const { data: created, error } = await supabaseClient
+    .from("team_sheets")
+    .insert({ fixture_id: fixtureId, created_by: userId })
+    .select()
+    .single();
+
+  if (error) { console.error("Failed to create team sheet:", error); return null; }
+  return created;
+}
+
+async function renderTeamSheetScreen(fixture, team) {
+  const sheet = await loadOrCreateTeamSheet(fixture.id);
+  if (!sheet) return;
+
+  const { data: selections } = await supabaseClient
+    .from("team_sheet_selections")
+    .select("*")
+    .eq("team_sheet_id", sheet.id);
+
+  const selectionMap = {};
+  (selections || []).forEach(s => { selectionMap[s.user_id] = s.is_in; });
+
+  const memberRows = team.members.map(m => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);">
+      <span>${m.profiles?.display_name || "Unnamed player"}</span>
+      <button type="button" class="chip" data-member-id="${m.user_id}" aria-pressed="${selectionMap[m.user_id] ? "true" : "false"}">
+        ${selectionMap[m.user_id] ? "In" : "Out"}
+      </button>
+    </div>
+  `).join("");
+
+  matchList.innerHTML = `
+    <div class="card" data-sport="${team.sport}">
+      <p class="stat-value">${fixture.opponent} (${fixture.is_home ? "H" : "A"})</p>
+      <p class="label" style="margin-top:4px;">${fixture.date} · ${sheet.status === "published" ? "Published" : "Draft"}</p>
+    </div>
+
+    <p class="label" style="margin-top:16px;">Squad</p>
+    <div class="card">${memberRows}</div>
+
+    <button type="button" id="sheet-save-draft-btn" class="btn btn--ghost" style="margin-top:16px;">Save draft</button>
+    <button type="button" id="sheet-publish-btn" class="btn" style="margin-top:10px;">Publish</button>
+    <button type="button" id="sheet-back-btn" class="btn btn--ghost" style="margin-top:10px;">Back</button>
+    <p id="sheet-status" class="tiny" style="color:var(--muted);margin-top:10px;"></p>
+  `;
+
+  document.querySelectorAll("[data-member-id]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const isIn = btn.getAttribute("aria-pressed") === "true";
+      btn.setAttribute("aria-pressed", isIn ? "false" : "true");
+      btn.textContent = isIn ? "Out" : "In";
+    });
+  });
+
+  document.getElementById("sheet-back-btn").addEventListener("click", () => renderTeamDetail());
+
+  async function saveSelections(newStatus) {
+    const statusEl = document.getElementById("sheet-status");
+    const rows = team.members.map(m => ({
+      team_sheet_id: sheet.id,
+      user_id: m.user_id,
+      is_in: document.querySelector(`[data-member-id="${m.user_id}"]`).getAttribute("aria-pressed") === "true"
+    }));
+
+    const { error: selectionsError } = await supabaseClient
+      .from("team_sheet_selections")
+      .upsert(rows, { onConflict: "team_sheet_id,user_id" });
+    if (selectionsError) { console.error("Failed to save selections:", selectionsError); statusEl.textContent = "Something went wrong."; return; }
+
+    const { error: statusError } = await supabaseClient
+      .from("team_sheets")
+      .update({ status: newStatus })
+      .eq("id", sheet.id);
+    if (statusError) console.error("Failed to update sheet status:", statusError);
+
+    statusEl.textContent = newStatus === "published" ? "Published." : "Draft saved.";
+  }
+
+  document.getElementById("sheet-save-draft-btn").addEventListener("click", () => saveSelections("draft"));
+  document.getElementById("sheet-publish-btn").addEventListener("click", () => saveSelections("published"));
 }
