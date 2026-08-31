@@ -164,6 +164,8 @@ let matches = [];
 let currentDetailMatchId = null;
 let editingId = null;
 let userProfile = null;
+let pendingSelections = [];
+let activeSelectionId = null;
 
 function getFieldsForSport(sport) {
   return [...commonFields, ...sportFields[sport]];
@@ -643,13 +645,32 @@ function renderInProgressCards() {
   return html;
 }
 
+function renderPendingSelectionCards() {
+  if (!pendingSelections.length) return "";
+  return pendingSelections.map(sel => {
+    const fixture = sel.team_sheets.fixtures;
+    return `
+      <div class="card" data-sport="football" data-log-selection="${sel.id}" style="cursor:pointer;">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Football · ${fixture.opponent} (${fixture.is_home ? "H" : "A"})</p>
+            <p class="card-meta">${fixture.date}</p>
+          </div>
+          <span class="chip" aria-pressed="true">Log match</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
 function renderList(list) {
   const sorted = [...list].sort((a, b) => new Date(b.date) - new Date(a.date));
   const inProgressHtml = renderInProgressCards();
-  matchList.innerHTML = inProgressHtml;
+  const pendingHtml = (currentView === "all" || currentView === "football") ? renderPendingSelectionCards() : "";
+  matchList.innerHTML = inProgressHtml + pendingHtml;
 
   if (list.length === 0) {
-    if (!inProgressHtml) {
+    if (!inProgressHtml && !pendingHtml) {
       matchList.innerHTML = `<p class="empty-state">No activities yet.</p>`;
     }
     return;
@@ -781,6 +802,18 @@ matchList.addEventListener("click", (event) => {
   resumeInProgress(resumeCard.dataset.resume);
 });
 
+matchList.addEventListener("click", (event) => {
+  const logCard = event.target.closest("[data-log-selection]");
+  if (!logCard) return;
+  const selection = pendingSelections.find(s => s.id === logCard.dataset.logSelection);
+  if (!selection) return;
+  activeSelectionId = selection.id;
+  if (currentMode !== "feed") setMode("feed");
+  setView("football");
+  buildFootballForm(null, selection.team_sheets.fixtures);
+  form.style.display = "flex";
+});
+
 function startEdit(id) {
   const match = matches.find(m => m.id === id);
   editingId = id;
@@ -829,6 +862,7 @@ addMatchBtn.addEventListener("click", () => {
     form.style.display = "none";
     editingId = null;
     golfRound = null;
+    activeSelectionId = null;
     return;
   }
 
@@ -905,12 +939,34 @@ form.addEventListener("submit", async function (event) {
   form.style.display = "none";
 });
 
+async function loadPendingSelectionsToLog() {
+  const userId = await ensureSignedIn();
+  if (!userId) return [];
+  const today = todayISODate();
+
+  const { data, error } = await supabaseClient
+    .from("team_sheet_selections")
+    .select("id, team_sheets(status, fixtures(id, opponent, date, is_home, teams(sport)))")
+    .eq("user_id", userId)
+    .eq("is_in", true)
+    .is("match_id", null);
+
+  if (error) { console.error("Failed to load pending selections:", error); return []; }
+
+  return (data || []).filter(s =>
+    s.team_sheets?.status === "published" &&
+    s.team_sheets?.fixtures?.date <= today &&
+    s.team_sheets?.fixtures?.teams?.sport === "football"
+  );
+}
+
 async function showApp() {
   document.getElementById("auth-screen").style.display = "none";
   document.getElementById("onboarding-screen").style.display = "none";
   document.querySelector(".app").style.display = "block";
   matches = await loadMatchesFromSupabase();
   userTeams = await loadUserTeams();
+  pendingSelections = await loadPendingSelectionsToLog();
   setMode("feed");
 }
 

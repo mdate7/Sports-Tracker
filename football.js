@@ -1,4 +1,4 @@
-async function buildFootballForm(existingMatch = null) {
+async function buildFootballForm(existingMatch = null, prefillFixture = null) {
   const footballTeams = await getFootballTeamsForUser();
   const fixtures = await getUpcomingFixturesForTeams(footballTeams.map(t => t.id));
 
@@ -60,11 +60,11 @@ async function buildFootballForm(existingMatch = null) {
 
     <div class="field" style="margin-top:16px;">
       <label class="label" for="date">Date</label>
-      <input type="date" id="date" value="${existingMatch ? existingMatch.date : todayISODate()}" required>
+      <input type="date" id="date" value="${existingMatch ? existingMatch.date : (prefillFixture ? prefillFixture.date : todayISODate())}" required>
     </div>
     <div class="field">
       <label class="label" for="opponent">Opponent</label>
-      <input type="text" id="opponent" value="${existingMatch?.opponent || ""}" required>
+      <input type="text" id="opponent" value="${existingMatch?.opponent || prefillFixture?.opponent || ""}" required>
     </div>
     <div class="field">
       <label class="label" for="notes">Notes (optional)</label>
@@ -76,7 +76,7 @@ async function buildFootballForm(existingMatch = null) {
         <label class="label" for="fixture-select">Attach to fixture (optional)</label>
         <select id="fixture-select">
           <option value="">None</option>
-          ${fixtures.map(f => `<option value="${f.id}" ${existingMatch?.fixtureId === f.id ? "selected" : ""}>${f.opponent} · ${f.date}</option>`).join("")}
+          ${fixtures.map(f => `<option value="${f.id}" ${(existingMatch?.fixtureId === f.id) || (prefillFixture?.id === f.id) ? "selected" : ""}>${f.opponent} · ${f.date}</option>`).join("")}
         </select>
       </div>
     ` : ""}
@@ -135,6 +135,16 @@ async function buildFootballForm(existingMatch = null) {
         position: payload.position, fixture_id: payload.fixture_id
       });
     if (detailError) console.error("Failed to save football details:", detailError);
+
+    if (activeSelectionId) {
+    const { error: linkError } = await supabaseClient
+    .from("team_sheet_selections")
+    .update({ match_id: matchRow.id })
+    .eq("id", activeSelectionId);
+  if (linkError) console.error("Failed to link selection:", linkError);
+  activeSelectionId = null;
+  pendingSelections = await loadPendingSelectionsToLog();
+}
   }
 
   matches = await loadMatchesFromSupabase();
