@@ -931,6 +931,9 @@ if (isOpen) {
 form.addEventListener("submit", async function (event) {
   event.preventDefault();
 
+  if (currentView === "gym") return;
+  if (currentView === "football") return;
+
   const sport = currentView;
   const fields = getFieldsForSport(sport);
   const values = {};
@@ -1037,7 +1040,6 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
 });
 
 async function init() {
-  console.log("FRESH CODE CHECK 999");
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {
     await handleSignedIn(session.user.id);
