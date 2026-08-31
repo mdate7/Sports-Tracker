@@ -293,7 +293,7 @@ function renderGolfDetailHtml(match) {
 function renderGymDetailHtml(match) {
   if (!match.sets || match.sets.length === 0) return "";
 
-  const totalVolume = match.sets.reduce((sum, s) => sum + ((s.weight || 0) * (s.reps || 0) * (s.rounds || 1)), 0);
+  const focusAreas = [...new Set(match.sets.map(s => s.muscleGroup).filter(Boolean))];
   const distinctExercises = new Set(match.sets.map(s => s.exercise).filter(Boolean)).size;
 
   const groups = {};
@@ -318,8 +318,8 @@ function renderGymDetailHtml(match) {
     <div class="stats" style="margin-top:12px;">
       <div><span class="stat-value num">${match.sets.length}</span><p class="label">Sets</p></div>
       <div><span class="stat-value num">${distinctExercises}</span><p class="label">Exercises</p></div>
-      <div><span class="stat-value num">${totalVolume}</span><p class="label">Volume (kg)</p></div>
     </div>
+      ${focusAreas.length ? `<p class="label" style="margin-top:10px;">Focus areas</p><p class="stat-value" style="font-size:0.95rem;margin-top:2px;">${focusAreas.join(", ")}</p>` : ""}
     ${groupsHtml}
   `;
 }
