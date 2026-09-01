@@ -241,12 +241,15 @@ function openSportForm(sport) {
       const resume = confirm("You have an unfinished round in progress. Resume it?");
       if (resume) {
         golfRound = JSON.parse(saved);
+        openScreen("Resume round");
         renderHoleStep();
       } else {
         clearRoundProgress();
+        openScreen("Log a round");
         buildGolfSetup();
       }
     } else {
+      openScreen("Log a round");
       buildGolfSetup();
     }
   } else if (sport === "gym") {
@@ -255,20 +258,25 @@ function openSportForm(sport) {
         const resume = confirm("You have an unfinished gym session in progress. Resume it?");
         if (resume) {
             gymSession = JSON.parse(saved);
+            openScreen("Resume session");
             renderGymSets();
         } else {
             clearSessionProgress();
+            openScreen("Log a session");
             buildGymSetup();
         }
     } else {
+        openScreen("Log a session");
         buildGymSetup();
     } 
     } else if (sport === "football") {
   buildFootballForm();  
   } else {
     buildForm(sport);
+    form.style.display = "flex";
   }
 }
+
 
 function buildSportPicker() {
   form.innerHTML = `
@@ -473,68 +481,6 @@ function buildForm(sport, existingMatch = null) {
   button.textContent = existingMatch ? "Save Changes" : "Add Activity";
   form.appendChild(button);
 }
-
-form.addEventListener("submit", async function (event) {
-  event.preventDefault();
-
-  if (currentView === "gym") return;
-  if (currentView === "football") return;
-
-  const sport = currentView;
-
-  if (!gymSession || !gymSession.sets || gymSession.sets.length === 0) {
-    alert("Add at least one set before saving your gym session.");
-    return;
-  }
-
-  const userId = await ensureSignedIn();
-  if (!userId) {
-    alert("Couldn't verify your session — try refreshing and saving again.");
-    return;
-  }
-
-  const { data: matchRow, error: matchError } = await supabaseClient
-    .from("matches")
-    .insert({
-      user_id: userId,
-      sport: "gym",
-      date: document.getElementById("gym-date").value,
-      match_rating: Number(document.getElementById("gym-rating").value),
-      notes: document.getElementById("gym-notes").value || null
-    })
-    .select()
-    .single();
-
-  if (matchError) {
-    console.error("Failed to save session:", matchError);
-    alert("Something went wrong saving this session — check the console.");
-    return;
-  }
-
-  const { error: detailError } = await supabaseClient
-    .from("gym_details")
-    .insert({ match_id: matchRow.id, type: gymSession.type });
-  if (detailError) console.error("Failed to save gym details:", detailError);
-
-  const setRows = gymSession.sets.map((set, index) => ({
-    match_id: matchRow.id,
-    set_number: index + 1,
-    exercise: set.exercise,
-    muscle_group: set.muscleGroup,
-    weight: set.weight || null,
-    reps: set.reps || null,
-    rounds: set.rounds || null
-  }));
-
-  const { error: setsError } = await supabaseClient.from("gym_sets").insert(setRows);
-  if (setsError) console.error("Failed to save sets:", setsError);
-
-  clearSessionProgress();
-  gymSession = null;
-  matches = await loadMatchesFromSupabase();
-  renderView();
-  form.style.display = "none";
-});
 
 function renderProfileScreen() {
   const tracked = userProfile ? userProfile.sports_tracked : [];
@@ -839,15 +785,15 @@ function resumeInProgress(sport) {
     if (!saved) return;
     golfRound = JSON.parse(saved);
     setView("golf");
+    openScreen("Resume round");
     renderHoleStep();
-    form.style.display = "flex";
   } else if (sport === "gym") {
     const saved = localStorage.getItem("inProgressGymSession");
     if (!saved) return;
     gymSession = JSON.parse(saved);
     setView("gym");
+    openScreen("Resume session");
     renderGymSets();
-    form.style.display = "flex";
   }
 }
 

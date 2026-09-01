@@ -216,7 +216,7 @@ function finishGymSession() {
     gymSession = null;
     matches = await loadMatchesFromSupabase();
     renderView();
-    form.style.display = "none";
+    closeEntryScreen();
   });
 }
 
@@ -234,6 +234,6 @@ function editGymSession(match) {
     type: match.type,
     sets: match.sets.map(s => ({ ...s }))
   };
+  openScreen("Edit session");
   renderGymSets();
-  form.style.display = "flex";
 }

@@ -153,7 +153,7 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
 
   matches = await loadMatchesFromSupabase();
   renderView();
-  form.style.display = "none";
+  closeEntryScreen();
 }, { once: true });
 
   function refreshBadge() {
@@ -240,4 +240,13 @@ function saveFootballDraft() {
 
 function clearFootballDraft() {
   localStorage.removeItem("draftFootballMatch");
+}
+
+function closeEntryScreen() {
+  editingId = null;
+  golfRound = null;
+  gymSession = null;
+  activeSelectionId = null;
+  clearFootballDraft();
+  closeScreen();
 }

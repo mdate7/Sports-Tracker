@@ -354,7 +354,7 @@ function finishGolfRound() {
     matches = await loadMatchesFromSupabase();
     currentDetailMatchId = null;
     renderView();
-    form.style.display = "none";
+    closeEntryScreen();
   });
 }
 
@@ -374,7 +374,7 @@ function editGolfRound(match) {
     holes: match.holes.map(h => ({ ...h })),
     holeIndex: 0
   };
+  openScreen("Edit round");
   renderHoleStep();
-  form.style.display = "flex";
 }
 
