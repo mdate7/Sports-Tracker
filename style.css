@@ -100,7 +100,7 @@
 }
 
 /* golf wizard back/next sit side by side rather than full-width stacked */
-#match-form div[style*="flex"] button {
+.hole-nav-row button {
   width: auto;
   flex: 1;
 }

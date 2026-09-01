@@ -91,7 +91,7 @@ form.innerHTML = `
     <label class="label" for="hole-putts">Putts (optional)</label>
     <input type="number" id="hole-putts" value="${hole.putts}">
   </div>
-  <div style="display:flex; gap:8px;">
+<div class="hole-nav-row" style="display:flex; gap:8px;">
     ${holeIndex > 0 ? `<button type="button" id="hole-back-btn" class="btn btn--ghost">Back</button>` : ""}
     <button type="button" id="hole-next-btn" class="btn">${holeIndex === numHoles - 1 ? "Finish Round" : "Next Hole"}</button>
   </div>
