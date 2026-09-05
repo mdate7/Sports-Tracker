@@ -10,7 +10,11 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const SCORECARD_PROMPT = `You are reading a photo of a golf scorecard. Extract the data and respond with ONLY a JSON object, no markdown fences, no preamble, no explanation.
+const SCORECARD_PROMPT = `You are reading a photo of a golf scorecard and extracting structured data from it.
+
+You may reason through what you see first. Once you've worked out the values, respond with the JSON object as the last thing in your response, with no other text after it.
+
+If the scorecard shows multiple players, use the leftmost (or first-listed) player's column for every hole, and ignore the other players' scores entirely.
 
 Shape:
 {
@@ -23,9 +27,9 @@ Shape:
 
 Rules:
 - If a value is unclear, smudged, cropped, or you are not confident, use null. Do NOT guess.
-- "strokes" is the most important field — be especially conservative here.
+- "strokes" is the most important field — be especially conservative here, but only use null for values you genuinely can't read, not because multiple players makes the sheet visually busy.
 - If you can't tell how many holes there are, default numHoles to the count of hole rows you can actually see.
-- Return valid JSON only.`;
+- End your response with the JSON object, and nothing after it.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -93,7 +97,11 @@ Deno.serve(async (req) => {
     const data = await anthropicRes.json();
     const textBlock = data.content?.find((b: any) => b.type === "text");
     const raw = textBlock?.text ?? "{}";
-    const cleaned = raw.replace(/```json|```/g, "").trim();
+    const firstBrace = raw.indexOf("{");
+    const lastBrace = raw.lastIndexOf("}");
+    const cleaned = firstBrace !== -1 && lastBrace !== -1
+    ? raw.slice(firstBrace, lastBrace + 1)
+    : raw.replace(/```json|```/g, "").trim();
 
     let parsed;
     try {
