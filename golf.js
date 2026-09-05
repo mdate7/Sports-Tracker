@@ -35,21 +35,26 @@ async function saveCourseProfile(courseName, parPerHole) {
 }
 
 function buildGolfSetup() {
-    const courseOptions = getDistinctFieldValues("golf", "courseName")
-    .map(v => `<option value="${v}"></option>`).join("");
   form.innerHTML = `
-      <datalist id="course-options">${courseOptions}</datalist>
     <div class="field">
       <label class="label" for="golf-course-name">Course Name</label>
-      <input type="text" id="golf-course-name" list="course-options" required>
+      <input type="text" id="golf-course-name" required>
     </div>
     <div class="field">
       <label class="label" for="golf-num-holes">Number of Holes</label>
       <input type="number" id="golf-num-holes" value="18" required>
     </div>
     <button type="button" id="golf-start-btn" class="btn">Start Round</button>
+    <button type="button" id="golf-upload-btn" class="btn btn--ghost" style="margin-top:8px;">📷 Upload Scorecard Photo</button>
+    <input type="file" id="golf-scorecard-input" accept="image/*" style="display:none">
   `;
   document.getElementById("golf-start-btn").addEventListener("click", startGolfRound);
+  document.getElementById("golf-upload-btn").addEventListener("click", () => {
+    document.getElementById("golf-scorecard-input").click();
+  });
+  document.getElementById("golf-scorecard-input").addEventListener("change", (e) => {
+    if (e.target.files[0]) handleScorecardUpload(e.target.files[0]);
+  });
 }
 
 async function startGolfRound() {
@@ -70,6 +75,39 @@ async function startGolfRound() {
   golfRound = { courseName, numHoles, holes, holeIndex: 0 };
   saveRoundProgress();
   renderHoleStep();
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]); // strip the data: prefix
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleScorecardUpload(file) {
+  form.innerHTML = `<p style="font-size:13px;color:var(--muted);">Reading your scorecard...</p>`;
+
+  try {
+    const imageBase64 = await fileToBase64(file);
+    const { data, error } = await supabaseClient.functions.invoke("parse-scorecard", {
+      body: { imageBase64, mediaType: file.type || "image/jpeg" }
+    });
+
+    if (error) {
+      console.error("Scorecard parse failed:", error);
+      alert("Couldn't read that scorecard — try a clearer photo, or enter it manually.");
+      buildGolfSetup();
+      return;
+    }
+
+    buildScorecardReview(data);
+  } catch (err) {
+    console.error("Unexpected error during scorecard upload:", err);
+    alert("Something went wrong — try again.");
+    buildGolfSetup();
+  }
 }
 
 
@@ -229,6 +267,59 @@ function buildStrip(holes) {
   return holes.map(h => `<i data-v="${getHoleState(h)}"></i>`).join("");
 }
 
+function buildScorecardReview(parsed) {
+  const holes = parsed.holes.map(h => ({
+    par: h.par ?? "",
+    strokes: h.strokes ?? "",
+    putts: h.putts ?? ""
+  }));
+
+  const rowsHtml = holes.map((h, i) => `
+    <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+      <span class="label" style="width:28px;">#${i + 1}</span>
+      <input type="number" class="review-par" data-i="${i}" placeholder="Par" value="${h.par}" style="width:60px;">
+      <input type="number" class="review-strokes" data-i="${i}" placeholder="Strokes" value="${h.strokes}" style="width:70px; ${h.strokes === "" ? "border:1px solid var(--negative);" : ""}">
+      <input type="number" class="review-putts" data-i="${i}" placeholder="Putts" value="${h.putts}" style="width:60px;">
+    </div>
+  `).join("");
+
+  form.innerHTML = `
+    <p style="font-size:13px;color:var(--muted);">Check the extracted scores — anything highlighted needs a value.</p>
+    <div class="field">
+      <label class="label" for="review-course-name">Course Name</label>
+      <input type="text" id="review-course-name" value="${parsed.courseName || ""}">
+    </div>
+    <div style="max-height:320px; overflow-y:auto; margin:12px 0;">${rowsHtml}</div>
+    <button type="button" id="review-confirm-btn" class="btn">Looks Good, Continue</button>
+    <button type="button" id="review-cancel-btn" class="btn btn--ghost" style="margin-top:8px;">Start Over</button>
+  `;
+
+  document.getElementById("review-cancel-btn").addEventListener("click", buildGolfSetup);
+
+  document.getElementById("review-confirm-btn").addEventListener("click", () => {
+    const updatedHoles = holes.map((_, i) => ({
+      par: Number(document.querySelector(`.review-par[data-i="${i}"]`).value) || "",
+      strokes: Number(document.querySelector(`.review-strokes[data-i="${i}"]`).value) || "",
+      putts: Number(document.querySelector(`.review-putts[data-i="${i}"]`).value) || ""
+    }));
+
+    const missingStrokes = updatedHoles.some(h => h.strokes === "");
+    if (missingStrokes) {
+      alert("Every hole needs a strokes value before continuing.");
+      return;
+    }
+
+    golfRound = {
+      courseName: document.getElementById("review-course-name").value.trim(),
+      numHoles: updatedHoles.length,
+      holes: updatedHoles,
+      holeIndex: updatedHoles.length - 1
+    };
+    saveRoundProgress();
+    finishGolfRound();
+  });
+}
+
 function finishGolfRound() {
   const holes = golfRound.holes;
   const totalStrokes = holes.reduce((sum, h) => sum + (h.strokes || 0), 0);
@@ -377,4 +468,3 @@ function editGolfRound(match) {
   openScreen("Edit round");
   renderHoleStep();
 }
-
