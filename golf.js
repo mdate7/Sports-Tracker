@@ -45,10 +45,20 @@ function buildGolfSetup() {
       <input type="number" id="golf-num-holes" value="18" required>
     </div>
     <button type="button" id="golf-start-btn" class="btn">Start Round</button>
-    <button type="button" id="golf-upload-btn" class="btn btn--ghost" style="margin-top:8px;">📷 Upload Scorecard Photo</button>
+    <button type="button" id="golf-camera-btn" class="btn btn--ghost" style="margin-top:8px;">📷 Take Scorecard Photo</button>
+    <button type="button" id="golf-upload-btn" class="btn btn--ghost" style="margin-top:8px;">🖼️ Choose from Library</button>
+    <input type="file" id="golf-scorecard-camera" accept="image/*" capture="environment" style="display:none">
     <input type="file" id="golf-scorecard-input" accept="image/*" style="display:none">
   `;
   document.getElementById("golf-start-btn").addEventListener("click", startGolfRound);
+
+  document.getElementById("golf-camera-btn").addEventListener("click", () => {
+    document.getElementById("golf-scorecard-camera").click();
+  });
+  document.getElementById("golf-scorecard-camera").addEventListener("change", (e) => {
+    if (e.target.files[0]) handleScorecardUpload(e.target.files[0]);
+  });
+
   document.getElementById("golf-upload-btn").addEventListener("click", () => {
     document.getElementById("golf-scorecard-input").click();
   });
