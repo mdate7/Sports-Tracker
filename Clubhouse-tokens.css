@@ -224,8 +224,8 @@ a:hover { color: var(--text); }
 .strip { display: flex; gap: 2px; align-items: flex-end; height: 34px; }
 .strip i { flex: 1; border-radius: 2px; background: rgba(237,241,243,.16); }
 .strip i[data-v="under"] { height: 35%;  background: var(--sport); }
-.strip i[data-v="par"]   { height: 60%; }
-.strip i[data-v="over"]  { height: 85%;  background: rgba(237,241,243,.32); }
+.strip i[data-v="par"]   { height: 60%; background: rgba(2, 165, 246, 0.16); }
+.strip i[data-v="over"]  { height: 85%;  background: rgba(189, 118, 3, 0.32); }
 .strip i[data-v="worse"] { height: 100%; background: var(--negative); }
 
 /* ==========================================================================
