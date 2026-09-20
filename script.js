@@ -565,8 +565,8 @@ function renderMatch(match) {
     const cls = match.strokes > match.par ? "delta--neg" : "";
     hero = `<span class="delta num ${cls}">${diff}</span>`;
   } else if (match.sport === "gym") {
-    hero = `<span class="delta num">${match.sets.length} sets</span>`;
-  }
+  hero = `<span class="delta num">${(match.sets || []).length} sets</span>`;
+}
 
   const title = match.opponent || match.courseName || "";
 
@@ -676,7 +676,13 @@ function renderList(list) {
     }
     return;
   }
-  sorted.forEach(renderMatch);
+sorted.forEach(match => {
+  try {
+    renderMatch(match);
+  } catch (err) {
+    console.error("Failed to render match:", match.id, err);
+  }
+});
 }
 
 function renderMatchDetailScreen() {
