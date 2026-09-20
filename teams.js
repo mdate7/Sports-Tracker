@@ -419,22 +419,43 @@ async function renderTeamSheetScreen(fixture, team) {
   const sheet = await loadOrCreateTeamSheet(fixture.id);
   if (!sheet) return;
 
-  const { data: selections } = await supabaseClient
-    .from("team_sheet_selections")
-    .select("*")
-    .eq("team_sheet_id", sheet.id);
+  const [players, { data: selections }] = await Promise.all([
+    ensurePlayersForTeam(team.id, team.members),
+    supabaseClient.from("team_sheet_selections").select("*").eq("team_sheet_id", sheet.id)
+  ]);
 
-  const selectionMap = {};
-  (selections || []).forEach(s => { selectionMap[s.user_id] = s.is_in; });
+  const selectionByUser = new Map();
+  const selectionByPlayer = new Map();
+  (selections || []).forEach(s => {
+    if (s.user_id) selectionByUser.set(s.user_id, s.is_in);
+    if (s.player_id) selectionByPlayer.set(s.player_id, s.is_in);
+  });
 
-  const memberRows = team.members.map(m => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);">
-      <span>${m.profiles?.display_name || "Unnamed player"}</span>
-      <button type="button" class="chip" data-member-id="${m.user_id}" aria-pressed="${selectionMap[m.user_id] ? "true" : "false"}">
-        ${selectionMap[m.user_id] ? "In" : "Out"}
-      </button>
-    </div>
-  `).join("");
+  const squad = players.map(p => ({
+    playerId: p.id,
+    userId: p.user_id,
+    name: p.display_name,
+    isIn: p.user_id ? !!selectionByUser.get(p.user_id) : !!selectionByPlayer.get(p.id)
+  }));
+
+  function squadRowHtml(p) {
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);">
+        <span>${p.name}</span>
+        <button type="button" class="chip" data-player-id="${p.playerId}" aria-pressed="${p.isIn}">
+          ${p.isIn ? "In" : "Out"}
+        </button>
+      </div>
+    `;
+  }
+
+  function wireToggle(btn) {
+    btn.addEventListener("click", () => {
+      const isIn = btn.getAttribute("aria-pressed") === "true";
+      btn.setAttribute("aria-pressed", isIn ? "false" : "true");
+      btn.textContent = isIn ? "Out" : "In";
+    });
+  }
 
   matchList.innerHTML = `
     <div class="card" data-sport="${team.sport}">
@@ -443,7 +464,12 @@ async function renderTeamSheetScreen(fixture, team) {
     </div>
 
     <p class="label" style="margin-top:16px;">Squad</p>
-    <div class="card">${memberRows}</div>
+    <div class="card" id="sheet-squad-list">${squad.map(squadRowHtml).join("")}</div>
+
+    <div class="field" style="display:flex;gap:8px;margin-top:12px;">
+      <input type="text" id="sheet-add-player-input" placeholder="Add a player not on the team">
+      <button type="button" id="sheet-add-player-btn" class="btn btn--ghost btn--sm">Add</button>
+    </div>
 
     <button type="button" id="sheet-save-draft-btn" class="btn btn--ghost" style="margin-top:16px;">Save draft</button>
     <button type="button" id="sheet-publish-btn" class="btn" style="margin-top:10px;">Publish</button>
@@ -451,28 +477,54 @@ async function renderTeamSheetScreen(fixture, team) {
     <p id="sheet-status" class="tiny" style="color:var(--muted);margin-top:10px;"></p>
   `;
 
-  document.querySelectorAll("[data-member-id]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const isIn = btn.getAttribute("aria-pressed") === "true";
-      btn.setAttribute("aria-pressed", isIn ? "false" : "true");
-      btn.textContent = isIn ? "Out" : "In";
-    });
+  document.querySelectorAll("[data-player-id]").forEach(wireToggle);
+
+  document.getElementById("sheet-add-player-btn").addEventListener("click", async () => {
+    const input = document.getElementById("sheet-add-player-input");
+    const name = input.value.trim();
+    if (!name) return;
+
+    const { data: newPlayer, error } = await supabaseClient
+      .from("players")
+      .insert({ team_id: team.id, display_name: name })
+      .select()
+      .single();
+    if (error) { console.error("Failed to add player:", error); return; }
+
+    squad.push({ playerId: newPlayer.id, userId: null, name: newPlayer.display_name, isIn: true });
+    document.getElementById("sheet-squad-list").insertAdjacentHTML("beforeend", squadRowHtml(squad[squad.length - 1]));
+    wireToggle(document.querySelector(`[data-player-id="${newPlayer.id}"]`));
+    input.value = "";
   });
 
   document.getElementById("sheet-back-btn").addEventListener("click", () => renderTeamDetail());
 
   async function saveSelections(newStatus) {
     const statusEl = document.getElementById("sheet-status");
-    const rows = team.members.map(m => ({
-      team_sheet_id: sheet.id,
-      user_id: m.user_id,
-      is_in: document.querySelector(`[data-member-id="${m.user_id}"]`).getAttribute("aria-pressed") === "true"
-    }));
 
-    const { error: selectionsError } = await supabaseClient
-      .from("team_sheet_selections")
-      .upsert(rows, { onConflict: "team_sheet_id,user_id" });
-    if (selectionsError) { console.error("Failed to save selections:", selectionsError); statusEl.textContent = "Something went wrong."; return; }
+    const memberRows = [];
+    const adHocRows = [];
+    squad.forEach(p => {
+      const isIn = document.querySelector(`[data-player-id="${p.playerId}"]`).getAttribute("aria-pressed") === "true";
+      if (p.userId) {
+        memberRows.push({ team_sheet_id: sheet.id, user_id: p.userId, is_in: isIn });
+      } else {
+        adHocRows.push({ team_sheet_id: sheet.id, player_id: p.playerId, is_in: isIn });
+      }
+    });
+
+    if (memberRows.length) {
+      const { error } = await supabaseClient
+        .from("team_sheet_selections")
+        .upsert(memberRows, { onConflict: "team_sheet_id,user_id" });
+      if (error) { console.error("Failed to save member selections:", error); statusEl.textContent = "Something went wrong."; return; }
+    }
+    if (adHocRows.length) {
+      const { error } = await supabaseClient
+        .from("team_sheet_selections")
+        .upsert(adHocRows, { onConflict: "team_sheet_id,player_id" });
+      if (error) { console.error("Failed to save ad-hoc selections:", error); statusEl.textContent = "Something went wrong."; return; }
+    }
 
     const { error: statusError } = await supabaseClient
       .from("team_sheets")
@@ -642,6 +694,10 @@ function renderResultScoreStep() {
 
     <p class="label" id="result-squad-count-label" style="margin-top:16px;">Who played? (${squad.filter(p => p.inSquad).length})</p>
     <div class="chips" id="result-squad-chips">${squadChips}</div>
+    <div class="field" style="display:flex;gap:8px;margin-top:8px;">
+  <input type="text" id="result-add-player-input" placeholder="Add a player not on the team">
+  <button type="button" id="result-add-player-btn" class="btn btn--ghost btn--sm">Add</button>
+</div>
 
     <button type="button" id="result-next-btn" class="btn" style="margin-top:20px;">Next — goals & cards</button>
     <button type="button" id="result-save-score-btn" class="btn btn--ghost" style="margin-top:10px;">Save just the score</button>
@@ -675,6 +731,27 @@ function renderResultScoreStep() {
     chip.setAttribute("aria-pressed", player.inSquad ? "true" : "false");
     document.getElementById("result-squad-count-label").textContent = `Who played? (${squad.filter(p => p.inSquad).length})`;
   });
+
+  document.getElementById("result-add-player-btn").addEventListener("click", async () => {
+  const input = document.getElementById("result-add-player-input");
+  const name = input.value.trim();
+  if (!name) return;
+
+  const { data: newPlayer, error } = await supabaseClient
+    .from("players")
+    .insert({ team_id: team.id, display_name: name })
+    .select()
+    .single();
+  if (error) { console.error("Failed to add player:", error); return; }
+
+  const entry = { playerId: newPlayer.id, userId: null, name: newPlayer.display_name, inSquad: true, goals: 0, assists: 0, yellowCards: 0, redCard: false, motmVotes: 0, dotdVotes: 0 };
+  squad.push(entry);
+
+  document.getElementById("result-squad-chips").insertAdjacentHTML("beforeend",
+    `<button type="button" class="chip" data-squad-player="${entry.playerId}" aria-pressed="true">${entry.name}</button>`);
+  document.getElementById("result-squad-count-label").textContent = `Who played? (${squad.filter(p => p.inSquad).length})`;
+  input.value = "";
+});
 
   document.getElementById("result-next-btn").addEventListener("click", () => {
     resultDraft.venue = document.getElementById("result-venue").value.trim() || null;
