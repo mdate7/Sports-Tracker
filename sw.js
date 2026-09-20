@@ -1,4 +1,4 @@
-const CACHE_NAME = "clubhouse-v5";
+const CACHE_NAME = "clubhouse-v6";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -34,8 +34,17 @@ self.addEventListener("fetch", (event) => {
   const url = event.request.url;
   if (url.includes("supabase.co")) return;
 
-  // Always fetch these fresh from the network — never serve a stale cached copy
-  if (url.includes("index.html") || url.includes("script.js") || event.request.mode === "navigate") {
+  // Always fetch app code fresh from the network — never serve a stale copy.
+  //
+  // This used to name script.js explicitly, from when it was the only JS file.
+  // Once the code was split across auth/football/golf/gym/teams.js, those all
+  // fell through to the cache-first branch below and went stale independently
+  // of script.js — so a fix could land in one file and not another, which is
+  // maddening to debug. Match on extension instead of filename so new files
+  // are covered automatically.
+  const isAppCode = /\.(js|css)(\?|$)/.test(url) && url.startsWith(self.location.origin);
+
+  if (isAppCode || url.includes("index.html") || event.request.mode === "navigate") {
     event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
     return;
   }

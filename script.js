@@ -565,8 +565,8 @@ function renderMatch(match) {
     const cls = match.strokes > match.par ? "delta--neg" : "";
     hero = `<span class="delta num ${cls}">${diff}</span>`;
   } else if (match.sport === "gym") {
-  hero = `<span class="delta num">${(match.sets || []).length} sets</span>`;
-}
+    hero = `<span class="delta num">${match.sets.length} sets</span>`;
+  }
 
   const title = match.opponent || match.courseName || "";
 
@@ -676,13 +676,7 @@ function renderList(list) {
     }
     return;
   }
-sorted.forEach(match => {
-  try {
-    renderMatch(match);
-  } catch (err) {
-    console.error("Failed to render match:", match.id, err);
-  }
-});
+  sorted.forEach(renderMatch);
 }
 
 function renderMatchDetailScreen() {
@@ -724,13 +718,17 @@ const editButton = match.sport === "golf" || match.sport === "gym"
     renderView();
   });
 
-  document.getElementById("detail-edit-btn").addEventListener("click", () => {
-  if (match.sport === "golf") {
-    editGolfRound(match);
-  } else if (match.sport === "gym") {
-    editGymSession(match);
-  }
-});
+  // editButton is "" for football/cricket, so this element often doesn't
+  // exist — calling .addEventListener on the null threw a TypeError and
+  // killed the rest of this render. Same unguarded-access class of bug as
+  // the match.sets one from earlier.
+  document.getElementById("detail-edit-btn")?.addEventListener("click", () => {
+    if (match.sport === "golf") {
+      editGolfRound(match);
+    } else if (match.sport === "gym") {
+      editGymSession(match);
+    }
+  });
 }
 
 function renderView() {
@@ -823,8 +821,21 @@ matchList.addEventListener("click", (event) => {
 
 function startEdit(id) {
   const match = matches.find(m => m.id === id);
-  editingId = id;
+  if (!match) return;
   setView(match.sport);
+
+  // Football, golf and gym each have their own form builder AND their own
+  // save path — the generic submit handler below explicitly bails out for
+  // football/gym, and can't write golf holes. Routing them through buildForm
+  // rendered a "Save Changes" button that nothing was listening for, so the
+  // click silently did nothing. These three track their own editing state
+  // (existingMatch closure / golfRound.editingMatchId / gymSession.editingMatchId),
+  // so editingId stays null for them, same as the detail-view edit button.
+  if (match.sport === "football") { buildFootballForm(match); return; }
+  if (match.sport === "golf") { editGolfRound(match); return; }
+  if (match.sport === "gym") { editGymSession(match); return; }
+
+  editingId = id;
   buildForm(match.sport, match);
   form.style.display = "flex";
 }

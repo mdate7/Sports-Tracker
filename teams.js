@@ -128,20 +128,45 @@ async function renderTeamDetail() {
     renderAddFixtureForm(team);
   });
 
-  matchList.addEventListener("click", async function fixtureSheetClick(event) {
-  const btn = event.target.closest("[data-team-sheet-fixture]");
-  if (!btn) return;
-  const fixture = team.fixtures.find(f => f.id === btn.dataset.teamSheetFixture);
-  if (fixture) await renderTeamSheetScreen(fixture, team);
-}, { once: true });
+  // `team` is re-fetched on every render, so the permanent delegated listener
+  // below reads it from here rather than from a stale closure.
+  currentTeamDetail = team;
+  wireTeamFixtureClicks();
+}
 
-  matchList.addEventListener("click", async function addResultClick(event) {
-  const btn = event.target.closest("[data-add-result-fixture]");
-  if (!btn) return;
-  const fixture = team.fixtures.find(f => f.id === btn.dataset.addResultFixture);
-  if (fixture) await renderAddResultScreen(fixture, team);
-}, { once: true });
+// One delegated listener for every fixture-row button, attached exactly once.
+//
+// This used to be two separate listeners with { once: true }, which quietly
+// broke each other: `once` removes a listener after the first event it
+// RECEIVES, not the first time its body does any work — so clicking "Team
+// sheet" also removed the "Add result" listener (it fired, matched nothing,
+// returned, and was discarded anyway). Delegating from a single permanent
+// listener avoids both that and the duplicate-listener stacking that { once }
+// was presumably there to prevent.
+let currentTeamDetail = null;
+let teamFixtureClicksWired = false;
 
+function wireTeamFixtureClicks() {
+  if (teamFixtureClicksWired) return;
+  teamFixtureClicksWired = true;
+
+  matchList.addEventListener("click", async (event) => {
+    const team = currentTeamDetail;
+    if (!team) return;
+
+    const sheetBtn = event.target.closest("[data-team-sheet-fixture]");
+    if (sheetBtn) {
+      const fixture = team.fixtures.find(f => f.id === sheetBtn.dataset.teamSheetFixture);
+      if (fixture) await renderTeamSheetScreen(fixture, team);
+      return;
+    }
+
+    const resultBtn = event.target.closest("[data-add-result-fixture]");
+    if (resultBtn) {
+      const fixture = team.fixtures.find(f => f.id === resultBtn.dataset.addResultFixture);
+      if (fixture) await renderAddResultScreen(fixture, team);
+    }
+  });
 }
 
 function renderAddFixtureForm(team) {
@@ -502,10 +527,12 @@ let resultDraft = null;
 //   motmPlayerId, dotdPlayerId, addToMyRecord }
 
 async function renderAddResultScreen(fixture, team) {
-  const [sheet, players] = await Promise.all([
+  const [sheet, players, { data: existingAppearances, error: appearancesError }] = await Promise.all([
     loadOrCreateTeamSheet(fixture.id),
-    ensurePlayersForTeam(team.id, team.members)
+    ensurePlayersForTeam(team.id, team.members),
+    supabaseClient.from("fixture_appearances").select("*").eq("fixture_id", fixture.id)
   ]);
+  if (appearancesError) console.error("Failed to load existing appearances:", appearancesError);
 
   let selectionMap = {};
   if (sheet) {
@@ -516,14 +543,30 @@ async function renderAddResultScreen(fixture, team) {
     (selections || []).forEach(s => { selectionMap[s.user_id] = s.is_in; });
   }
 
-  const squad = players.map(p => ({
-    playerId: p.id,
-    userId: p.user_id,
-    name: p.display_name,
-    inSquad: p.user_id ? !!selectionMap[p.user_id] : false,
-    goals: 0, assists: 0, yellowCards: 0, redCard: false,
-    motmVotes: 0, dotdVotes: 0
-  }));
+  // Re-opening a fixture that already has saved appearances (i.e. "Edit
+  // result") should restore exactly what was published last time, not start
+  // the wizard from a blank slate — so any existing row per player wins over
+  // the team-sheet in/out guess, and its stats/votes seed the squad.
+  const appearanceByPlayer = new Map((existingAppearances || []).map(a => [a.player_id, a]));
+
+  const squad = players.map(p => {
+    const existing = appearanceByPlayer.get(p.id);
+    return {
+      playerId: p.id,
+      userId: p.user_id,
+      name: p.display_name,
+      inSquad: existing ? true : (p.user_id ? !!selectionMap[p.user_id] : false),
+      goals: existing?.goals ?? 0,
+      assists: existing?.assists ?? 0,
+      yellowCards: existing?.yellow_cards ?? 0,
+      redCard: existing?.red_card ?? false,
+      motmVotes: existing?.motm_votes ?? 0,
+      dotdVotes: existing?.dotd_votes ?? 0
+    };
+  });
+
+  const motmPlayerId = (existingAppearances || []).find(a => a.is_motm)?.player_id ?? null;
+  const dotdPlayerId = (existingAppearances || []).find(a => a.is_dotd)?.player_id ?? null;
 
   resultDraft = {
     fixture, team, squad,
@@ -532,8 +575,8 @@ async function renderAddResultScreen(fixture, team) {
     resultTag: null,
     venue: fixture.venue || "",
     kit: fixture.kit || "",
-    motmPlayerId: null,
-    dotdPlayerId: null,
+    motmPlayerId,
+    dotdPlayerId,
     addToMyRecord: true
   };
 

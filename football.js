@@ -1,3 +1,6 @@
+let footballSubmitHandler = null;
+let footballSubmitting = false;
+
 async function buildFootballForm(existingMatch = null, prefillFixture = null) {
   const footballTeams = await getFootballTeamsForUser();
   const fixtures = await getUpcomingFixturesForTeams(footballTeams.map(t => t.id));
@@ -87,12 +90,29 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
     <button type="submit" class="btn" style="margin-top:16px;">${existingMatch ? "Save Changes" : "Save Match"}</button>
   `;
 
-  form.addEventListener("submit", async function footballSubmit(event) {
-  event.preventDefault();
-  if (currentView !== "football") return;
+  // The submit handler is rebuilt every time this form opens. It used to be
+  // added with { once: true }, which leaked: opening "Log a match" and
+  // backing out WITHOUT submitting left that handler attached (once only
+  // removes it after it actually fires). The next submit then ran the stale
+  // handler too — with existingMatch = null — so editing a match could insert
+  // a duplicate alongside the update. Remove any previous handler first.
+  if (footballSubmitHandler) form.removeEventListener("submit", footballSubmitHandler);
 
+  footballSubmitHandler = async function footballSubmit(event) {
+  event.preventDefault();
+  if (currentView !== "football") {
+    console.warn("Football submit ignored — currentView is", currentView);
+    return;
+  }
+  if (footballSubmitting) return;   // guard against a double-tap double-insert
+  footballSubmitting = true;
+
+  try {
   const userId = await ensureSignedIn();
-  if (!userId) return;
+  if (!userId) {
+    alert("Couldn't verify your session — try refreshing and saving again.");
+    return;
+  }
 
   const payload = {
     date: document.getElementById("date").value,
@@ -111,16 +131,33 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
       .from("matches")
       .update({ date: payload.date, notes: payload.notes })
       .eq("id", existingMatch.id);
-    if (matchError) { console.error("Failed to update match:", matchError); return; }
+    if (matchError) {
+      console.error("Failed to update match:", matchError);
+      alert("Couldn't save your changes — check the console.");
+      return;
+    }
 
-    const { error: detailError } = await supabaseClient
+    const { error: detailError, data: updatedDetail } = await supabaseClient
       .from("football_details")
       .update({
         opponent: payload.opponent, goals_for: payload.goals_for, goals_against: payload.goals_against,
         goals: payload.goals, assists: payload.assists, position: payload.position, fixture_id: payload.fixture_id
       })
-      .eq("match_id", existingMatch.id);
-    if (detailError) console.error("Failed to update football details:", detailError);
+      .eq("match_id", existingMatch.id)
+      .select();
+    if (detailError) {
+      console.error("Failed to update football details:", detailError);
+      alert("Couldn't save your match details — check the console.");
+      return;
+    }
+    // An update that matches zero rows is NOT an error in Supabase — it just
+    // returns []. That's the silent-failure shape to watch for here (e.g. an
+    // RLS policy that allows the read but not the write).
+    if (!updatedDetail || updatedDetail.length === 0) {
+      console.error("Update matched no football_details row for match_id", existingMatch.id);
+      alert("Nothing was saved — no matching record was found (check RLS / match id).");
+      return;
+    }
 
   } else {
     const { data: matchRow, error: matchError } = await supabaseClient
@@ -154,7 +191,17 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
   matches = await loadMatchesFromSupabase();
   renderView();
   closeEntryScreen();
-}, { once: true });
+  } catch (err) {
+    // Without this, any thrown error left the form open with no feedback at
+    // all — indistinguishable from "the button does nothing".
+    console.error("Football save threw:", err);
+    alert("Something went wrong saving — check the console.");
+  } finally {
+    footballSubmitting = false;
+  }
+};
+
+  form.addEventListener("submit", footballSubmitHandler);
 
   function refreshBadge() {
     const badge = document.getElementById("football-result-badge");
