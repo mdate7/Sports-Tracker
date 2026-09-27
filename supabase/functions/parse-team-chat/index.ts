@@ -39,6 +39,7 @@ Shape:
 
 Rules:
 - Copy every name exactly as it appears in the chat (e.g. "Luff", "Shep", "Jake Luff" are all valid as written — do not try to resolve them to a single canonical name, that happens later by a human).
+- If a player is only identifiable by their WhatsApp sender label (for examplea phone number like "+44 7547 867208" posting "my assist"), use that label asthe name, copied exactly as it appears, including the "+" and spaces.
 - If a value isn't clearly stated anywhere in the chunk, use null (or [] for squad/goalEvents). Do NOT guess or infer beyond what's written.
 - Live commentary often updates the score goal-by-goal (e.g. "68' GOAL GREY 4-0 Welsh") — use the last/highest score mentioned as the final score, and use "notes" to flag it if the final score is ambiguous.
 - If the game appears to have been postponed, cancelled, or abandoned, say so in "notes" and leave goalsFor/goalsAgainst null.
