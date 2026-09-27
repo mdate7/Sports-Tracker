@@ -573,6 +573,27 @@ async function ensurePlayersForTeam(teamId, members) {
   return [...(existing || []).filter(p => !p.user_id), ...byUserId.values()];
 }
 
+function resolvePlayerByName(players, rawName) {
+  const needle = rawName.trim().toLowerCase();
+  return players.find(p =>
+    p.display_name.toLowerCase() === needle ||
+    (p.aliases || []).some(a => a.toLowerCase() === needle)
+  ) || null;
+}
+
+async function addPlayerAlias(playerId, currentAliases, rawName) {
+  const needle = rawName.trim();
+  if (currentAliases.some(a => a.toLowerCase() === needle.toLowerCase())) return currentAliases;
+
+  const updated = [...currentAliases, needle];
+  const { error } = await supabaseClient
+    .from("players")
+    .update({ aliases: updated })
+    .eq("id", playerId);
+  if (error) { console.error("Failed to save alias:", error); return currentAliases; }
+  return updated;
+}
+
 let resultDraft = null;
 // { fixture, team, goalsFor, goalsAgainst, resultTag, venue, kit,
 //   squad: [{ playerId, userId, name, inSquad, goals, assists, yellowCards, redCard, motmVotes, dotdVotes }],
