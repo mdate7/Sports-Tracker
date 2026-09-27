@@ -592,7 +592,12 @@ async function renderAddResultScreen(fixture, team) {
       .from("team_sheet_selections")
       .select("*")
       .eq("team_sheet_id", sheet.id);
-    (selections || []).forEach(s => { selectionMap[s.user_id] = s.is_in; });
+    (selections || []).forEach(s => {
+      const player = s.player_id
+        ? players.find(p => p.id === s.player_id)
+        : players.find(p => p.user_id === s.user_id);
+      if (player) selectionMap[player.id] = s.is_in;
+    });
   }
 
   // Re-opening a fixture that already has saved appearances (i.e. "Edit
@@ -607,7 +612,7 @@ async function renderAddResultScreen(fixture, team) {
       playerId: p.id,
       userId: p.user_id,
       name: p.display_name,
-      inSquad: existing ? true : (p.user_id ? !!selectionMap[p.user_id] : false),
+      inSquad: existing ? true : !!selectionMap[p.id],
       goals: existing?.goals ?? 0,
       assists: existing?.assists ?? 0,
       yellowCards: existing?.yellow_cards ?? 0,
