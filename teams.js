@@ -773,60 +773,134 @@ function renderResultScoreStep() {
   });
 }
 
+// Goals are entered in order (Goal 1 → scorer, assister) rather than as
+// per-player counters against the whole squad. Only per-player totals are
+// stored, so on "Edit result" the list is rebuilt from those totals: every
+// count survives, but which assist went with which goal may not.
+function buildGoalListFromSquad() {
+  const scorers = [];
+  const assisters = [];
+  resultDraft.squad.filter(p => p.inSquad).forEach(p => {
+    for (let i = 0; i < (p.goals || 0); i++) scorers.push(p.playerId);
+    for (let i = 0; i < (p.assists || 0); i++) assisters.push(p.playerId);
+  });
+  const goals = scorers.map(id => ({ scorerId: id, assistId: "" }));
+  assisters.forEach(id => {
+    const slot = goals.find(g => !g.assistId && g.scorerId !== id);
+    if (slot) slot.assistId = id;
+  });
+  return goals;
+}
+
+// Keep the per-player counts the rest of the flow (and the database) uses in
+// step with the goal list.
+function applyGoalListToSquad() {
+  resultDraft.squad.forEach(p => {
+    p.goals = resultDraft.goalList.filter(g => g.scorerId === p.playerId).length;
+    p.assists = resultDraft.goalList.filter(g => g.assistId === p.playerId).length;
+  });
+}
+
 function renderResultEventsStep() {
   const squadIn = resultDraft.squad.filter(p => p.inSquad);
-  const goalsAccounted = squadIn.reduce((sum, p) => sum + (p.goals || 0), 0);
+  const squadIds = new Set(squadIn.map(p => p.playerId));
 
-  const rows = squadIn.map(p => `
-    <div class="card" style="margin-bottom:10px;">
-      <p class="stat-value" style="font-size:0.9rem;">${escapeHtml(p.name)}</p>
-      <div style="display:flex;gap:10px;margin-top:10px;">
-        <div style="flex:1;">
-          <p class="label">Goals</p>
-          <div class="stepper" style="margin-top:6px;">
-            <button type="button" data-event-minus="goals" data-player="${p.playerId}">−</button>
-            <output data-event-output="goals" data-player="${p.playerId}">${p.goals}</output>
-            <button type="button" class="plus" data-event-plus="goals" data-player="${p.playerId}">+</button>
-          </div>
-        </div>
-        <div style="flex:1;">
-          <p class="label">Assists</p>
-          <div class="stepper" style="margin-top:6px;">
-            <button type="button" data-event-minus="assists" data-player="${p.playerId}">−</button>
-            <output data-event-output="assists" data-player="${p.playerId}">${p.assists}</output>
-            <button type="button" class="plus" data-event-plus="assists" data-player="${p.playerId}">+</button>
-          </div>
-        </div>
+  if (!resultDraft.goalList) resultDraft.goalList = buildGoalListFromSquad();
+  // Match the list to the full-time score, and drop anyone taken out of the squad.
+  const list = resultDraft.goalList
+    .map(g => ({
+      scorerId: g.scorerId === "og" || squadIds.has(g.scorerId) ? g.scorerId : "",
+      assistId: squadIds.has(g.assistId) ? g.assistId : ""
+    }))
+    .slice(0, resultDraft.goalsFor);
+  while (list.length < resultDraft.goalsFor) list.push({ scorerId: "", assistId: "" });
+  resultDraft.goalList = list;
+
+  const playerOptions = (selectedId, excludeId) => squadIn
+    .filter(p => p.playerId !== excludeId)
+    .map(p => `<option value="${p.playerId}" ${p.playerId === selectedId ? "selected" : ""}>${escapeHtml(p.name)}</option>`)
+    .join("");
+
+  const goalRow = (g, i) => `
+    <div class="goal-row" data-goal="${i}">
+      <p class="goal-num num">${i + 1}</p>
+      <div class="field">
+        <label class="label" for="goal-scorer-${i}">Scorer</label>
+        <select id="goal-scorer-${i}" data-goal-scorer="${i}">
+          <option value="">Not sure</option>
+          ${playerOptions(g.scorerId)}
+          <option value="og" ${g.scorerId === "og" ? "selected" : ""}>Own goal (theirs)</option>
+        </select>
       </div>
-      <div class="chips" style="margin-top:10px;">
-        <button type="button" class="chip" data-yellow-toggle="${p.playerId}" aria-pressed="${p.yellowCards > 0}">${p.yellowCards > 0 ? `🟨 ×${p.yellowCards}` : "🟨 Yellow"}</button>
-        <button type="button" class="chip" data-red-toggle="${p.playerId}" aria-pressed="${p.redCard}">🟥 Red</button>
+      <div class="field">
+        <label class="label" for="goal-assist-${i}">Assist</label>
+        <select id="goal-assist-${i}" data-goal-assist="${i}" ${g.scorerId === "og" ? "disabled" : ""}>
+          <option value="">None</option>
+          ${playerOptions(g.assistId, g.scorerId)}
+        </select>
+      </div>
+    </div>
+  `;
+
+  const cardRows = squadIn.map(p => `
+    <div class="card-row">
+      <span>${escapeHtml(p.name)}</span>
+      <div class="chips">
+        <button type="button" class="chip" data-yellow-toggle="${p.playerId}" aria-pressed="${p.yellowCards > 0}">${p.yellowCards > 0 ? `🟨 ×${p.yellowCards}` : "🟨"}</button>
+        <button type="button" class="chip" data-red-toggle="${p.playerId}" aria-pressed="${p.redCard}">🟥</button>
       </div>
     </div>
   `).join("");
 
+  const goalsHtml = resultDraft.goalsFor === 0
+    ? `<p class="empty-state" style="padding:16px 8px;">No goals for us. Straight on to cards.</p>`
+    : list.map(goalRow).join("");
+
   matchList.innerHTML = `
     <button type="button" id="events-back-btn" class="btn btn--ghost btn--sm" style="margin-bottom:12px;">← Back</button>
-    <p class="label" id="events-accounted-label">Goals: ${goalsAccounted} of ${resultDraft.goalsFor} accounted for</p>
-    <div style="margin-top:12px;">${rows || `<p class="empty-state">No one's marked as playing yet — go back and pick the squad.</p>`}</div>
+    <div class="card" data-sport="football">
+      <div class="card-head">
+        <p class="label">Our goals</p>
+        <p class="label num" id="events-accounted-label"></p>
+      </div>
+      ${squadIn.length ? goalsHtml : `<p class="empty-state">No one's marked as playing yet. Go back and pick the squad.</p>`}
+    </div>
+    <p class="label" style="margin-top:16px;">Cards</p>
+    <div class="card">${cardRows || `<p class="empty-state">No squad picked.</p>`}</div>
     <button type="button" id="events-next-btn" class="btn" style="margin-top:16px;">Next — MOTM & DOTD</button>
   `;
 
-  document.getElementById("events-back-btn").addEventListener("click", renderResultScoreStep);
+  const refreshAccounted = () => {
+    const known = list.filter(g => g.scorerId).length;
+    const el = document.getElementById("events-accounted-label");
+    if (el) el.textContent = resultDraft.goalsFor ? `${known} of ${resultDraft.goalsFor} scorers in` : "";
+  };
+  refreshAccounted();
 
-  function refreshAccounted() {
-    const total = resultDraft.squad.reduce((sum, p) => sum + (p.goals || 0), 0);
-    document.getElementById("events-accounted-label").textContent = `Goals: ${total} of ${resultDraft.goalsFor} accounted for`;
-  }
+  document.getElementById("events-back-btn").addEventListener("click", () => {
+    applyGoalListToSquad();
+    renderResultScoreStep();
+  });
 
-  matchList.querySelectorAll("[data-event-plus], [data-event-minus]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const field = btn.dataset.eventPlus || btn.dataset.eventMinus;
-      const player = resultDraft.squad.find(p => p.playerId === btn.dataset.player);
-      const delta = btn.dataset.eventPlus ? 1 : -1;
-      player[field] = Math.max(0, (player[field] || 0) + delta);
-      matchList.querySelector(`[data-event-output="${field}"][data-player="${player.playerId}"]`).textContent = player[field];
-      if (field === "goals") refreshAccounted();
+  matchList.querySelectorAll("[data-goal-scorer]").forEach(select => {
+    select.addEventListener("change", () => {
+      const i = Number(select.dataset.goalScorer);
+      list[i].scorerId = select.value;
+      // Someone can't assist their own goal, and own goals have no assist:
+      // rebuild just this row's assist options.
+      if (list[i].assistId === select.value || select.value === "og") list[i].assistId = "";
+      const assist = document.getElementById(`goal-assist-${i}`);
+      assist.innerHTML = `<option value="">None</option>${playerOptions(list[i].assistId, list[i].scorerId)}`;
+      assist.disabled = select.value === "og";
+      applyGoalListToSquad();
+      refreshAccounted();
+    });
+  });
+
+  matchList.querySelectorAll("[data-goal-assist]").forEach(select => {
+    select.addEventListener("change", () => {
+      list[Number(select.dataset.goalAssist)].assistId = select.value;
+      applyGoalListToSquad();
     });
   });
 
@@ -835,7 +909,7 @@ function renderResultEventsStep() {
       const player = resultDraft.squad.find(p => p.playerId === btn.dataset.yellowToggle);
       player.yellowCards = player.yellowCards > 0 ? 0 : 1;
       btn.setAttribute("aria-pressed", player.yellowCards > 0 ? "true" : "false");
-      btn.textContent = player.yellowCards > 0 ? `🟨 ×${player.yellowCards}` : "🟨 Yellow";
+      btn.textContent = player.yellowCards > 0 ? `🟨 ×${player.yellowCards}` : "🟨";
     });
   });
 
@@ -847,7 +921,10 @@ function renderResultEventsStep() {
     });
   });
 
-  document.getElementById("events-next-btn").addEventListener("click", renderResultPublishStep);
+  document.getElementById("events-next-btn").addEventListener("click", () => {
+    applyGoalListToSquad();
+    renderResultPublishStep();
+  });
 }
 
 function renderResultPublishStep() {

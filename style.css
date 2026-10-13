@@ -220,3 +220,38 @@
 .sc-legend span { display: inline-flex; align-items: center; gap: var(--s-2); }
 .sc-legend .score-mark { width: 14px; height: 14px; }
 .sc-legend .score-mark[data-mark="eagle"] { box-shadow: 0 0 0 1px var(--bg), 0 0 0 3px var(--sport); }
+
+/* --- Football result: goal-by-goal entry --- */
+
+.goal-row {
+  display: grid;
+  grid-template-columns: 1.75rem 1fr 1fr;
+  gap: var(--s-2);
+  align-items: end;
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
+  margin-top: var(--s-3);
+}
+.goal-row .field { margin: 0; min-width: 0; }
+.goal-row select { width: 100%; text-overflow: ellipsis; }
+.goal-row select:disabled { opacity: .45; }
+.goal-num {
+  font: var(--t-card);
+  color: var(--sport);
+  align-self: center;
+  margin: 0 0 4px;
+}
+
+/* one compact line per player for cards */
+.card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-2) 0;
+  border-top: 1px solid var(--line);
+  font: var(--t-value);
+}
+.card-row:first-child { border-top: 0; padding-top: 0; }
+.card-row:last-child { padding-bottom: 0; }
+.card-row .chips { flex-wrap: nowrap; }
