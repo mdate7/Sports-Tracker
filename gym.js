@@ -41,19 +41,19 @@ function getDistinctGymValues(key) {
 
 function renderGymSets() {
   const exerciseOptions = getDistinctGymValues("exercise")
-    .map(v => `<option value="${v}"></option>`).join("");
+    .map(v => `<option value="${escapeHtml(v)}"></option>`).join("");
   const muscleOptions = getDistinctGymValues("muscleGroup")
-    .map(v => `<option value="${v}"></option>`).join("");
+    .map(v => `<option value="${escapeHtml(v)}"></option>`).join("");
 
   const setsHtml = gymSession.sets.map((set, index) => `
     <div class="card" style="margin-bottom:10px;">
       <div class="field">
         <label class="label" for="set-exercise-${index}">Exercise</label>
-        <input type="text" id="set-exercise-${index}" value="${set.exercise}" list="exercise-options">
+        <input type="text" id="set-exercise-${index}" value="${escapeHtml(set.exercise)}" list="exercise-options">
       </div>
       <div class="field">
         <label class="label" for="set-muscle-${index}">Muscle group</label>
-        <input type="text" id="set-muscle-${index}" value="${set.muscleGroup}" list="muscle-options">
+        <input type="text" id="set-muscle-${index}" value="${escapeHtml(set.muscleGroup)}" list="muscle-options">
       </div>
       <div style="display:flex; gap:8px;">
         <div class="field" style="flex:1;">
@@ -76,7 +76,7 @@ function renderGymSets() {
   form.innerHTML = `
     <datalist id="exercise-options">${exerciseOptions}</datalist>
     <datalist id="muscle-options">${muscleOptions}</datalist>
-    <p class="label">${sportNames.gym} · ${gymSession.type}</p>
+    <p class="label">${sportNames.gym} · ${escapeHtml(gymSession.type)}</p>
     <div id="gym-sets-list">${setsHtml}</div>
     <button type="button" id="gym-add-set-btn" class="btn btn--ghost" style="margin-top:8px;">+ Add set</button>
     <button type="button" id="gym-finish-btn" class="btn" style="margin-top:16px;">Finish Session</button>
@@ -131,7 +131,7 @@ function finishGymSession() {
     </div>
     <div class="field">
       <label class="label" for="gym-notes">Notes (optional)</label>
-      <input type="text" id="gym-notes" value="${existing ? existing.notes ?? "" : ""}">
+      <input type="text" id="gym-notes" value="${escapeHtml(existing?.notes)}">
     </div>
     <button type="button" id="gym-save-btn" class="btn">${existing ? "Save Changes" : "Save Session"}</button>
   `;
@@ -164,10 +164,20 @@ function finishGymSession() {
         .from("gym_details")
         .update({ type: gymSession.type })
         .eq("match_id", matchId);
-      if (detailError) console.error("Failed to update gym details:", detailError);
+      // An edit can't be rolled back, so say exactly what didn't save and leave
+      // the screen open so they can try again, instead of failing silently.
+      if (detailError) {
+        console.error("Failed to update gym details:", detailError);
+        alert("The session's date and notes saved, but the session type didn't. Try saving again.");
+        return;
+      }
 
       const { error: deleteSetsError } = await supabaseClient.from("gym_sets").delete().eq("match_id", matchId);
-      if (deleteSetsError) console.error("Failed to clear old sets:", deleteSetsError);
+      if (deleteSetsError) {
+        console.error("Failed to clear old sets:", deleteSetsError);
+        alert("The session saved, but the sets couldn't be updated. Try saving again.");
+        return;
+      }
 
       const setRows = gymSession.sets.map((set, index) => ({
         match_id: matchId,
@@ -179,7 +189,11 @@ function finishGymSession() {
         rounds: set.rounds === "" ? null : Number(set.rounds)
       }));
       const { error: setsError } = await supabaseClient.from("gym_sets").insert(setRows);
-      if (setsError) console.error("Failed to save updated sets:", setsError);
+      if (setsError) {
+        console.error("Failed to save updated sets:", setsError);
+        alert("The session saved, but the sets didn't. Try saving again.");
+        return;
+      }
 
     } else {
       const { data: matchRow, error: matchError } = await supabaseClient
@@ -196,7 +210,6 @@ function finishGymSession() {
       const { error: detailError } = await supabaseClient
         .from("gym_details")
         .insert({ match_id: matchRow.id, type: gymSession.type });
-      if (detailError) console.error("Failed to save gym details:", detailError);
 
       const setRows = gymSession.sets.map((set, index) => ({
         match_id: matchRow.id,
@@ -207,8 +220,19 @@ function finishGymSession() {
         reps: set.reps === "" ? null : Number(set.reps),
         rounds: set.rounds === "" ? null : Number(set.rounds)
       }));
-      const { error: setsError } = await supabaseClient.from("gym_sets").insert(setRows);
-      if (setsError) console.error("Failed to save sets:", setsError);
+      const { error: setsError } = detailError
+        ? { error: null }
+        : await supabaseClient.from("gym_sets").insert(setRows);
+
+      // A matches row without its gym_details/sets is what used to break the
+      // feed. Undo the half-save (child rows go with it) and keep the session in
+      // progress so nothing typed is lost.
+      if (detailError || setsError) {
+        console.error("Failed to save session details:", detailError || setsError);
+        await supabaseClient.from("matches").delete().eq("id", matchRow.id);
+        alert("Something went wrong saving this session, so nothing was saved. Your sets are still here; try again.");
+        return;
+      }
 
       clearSessionProgress();
     }

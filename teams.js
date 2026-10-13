@@ -49,7 +49,7 @@ async function renderTeamDetail() {
   const userId = await ensureSignedIn();
   const membersHtml = team.members.map(m => `
     <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
-      <span>${m.profiles?.display_name || "Unnamed player"}</span>
+      <span>${escapeHtml(m.profiles?.display_name || "Unnamed player")}</span>
       <span class="label">${m.role}</span>
     </div>
   `).join("");
@@ -64,7 +64,7 @@ async function renderTeamDetail() {
     <div style="padding:10px 0;border-bottom:1px solid var(--line);">
       <div style="display:flex;justify-content:space-between;">
         <div>
-          <p class="stat-value" style="font-size:0.9rem;">${f.opponent} (${f.is_home ? "H" : "A"})</p>
+          <p class="stat-value" style="font-size:0.9rem;">${escapeHtml(f.opponent)} (${f.is_home ? "H" : "A"})</p>
           <p class="label" style="margin-top:2px;">${f.competition || ""}</p>
         </div>
         <span class="label">${f.date}</span>
@@ -80,7 +80,7 @@ async function renderTeamDetail() {
 
   matchList.innerHTML = `
     <div class="card" data-sport="${team.sport}">
-      <p class="stat-value">${team.name}</p>
+      <p class="stat-value">${escapeHtml(team.name)}</p>
       <p class="label" style="margin-top:4px;">${sportNames[team.sport]} · Invite code: ${team.invite_code}</p>
     </div>
 
@@ -239,7 +239,7 @@ function renderTeamsScreen() {
 
 const teamsHtml = userTeams.map(t => `
   <div class="card" style="margin-bottom:10px;cursor:pointer;" data-sport="${t.sport}" data-team-id="${t.id}">
-    <p class="stat-value">${t.name}</p>
+    <p class="stat-value">${escapeHtml(t.name)}</p>
     <p class="label" style="margin-top:4px;">${sportNames[t.sport]} · Invite code: ${t.invite_code}</p>
   </div>
 `).join("");
@@ -441,7 +441,7 @@ async function renderTeamSheetScreen(fixture, team) {
   function squadRowHtml(p) {
     return `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);">
-        <span>${p.name}</span>
+        <span>${escapeHtml(p.name)}</span>
         <button type="button" class="chip" data-player-id="${p.playerId}" aria-pressed="${p.isIn}">
           ${p.isIn ? "In" : "Out"}
         </button>
@@ -459,7 +459,7 @@ async function renderTeamSheetScreen(fixture, team) {
 
   matchList.innerHTML = `
     <div class="card" data-sport="${team.sport}">
-      <p class="stat-value">${fixture.opponent} (${fixture.is_home ? "H" : "A"})</p>
+      <p class="stat-value">${escapeHtml(fixture.opponent)} (${fixture.is_home ? "H" : "A"})</p>
       <p class="label" style="margin-top:4px;">${fixture.date} · ${sheet.status === "published" ? "Published" : "Draft"}</p>
     </div>
 
@@ -652,20 +652,20 @@ function renderResultScoreStep() {
   const tag = resultDraft.resultTag || resultTagFromScore();
 
   const squadChips = squad.map(p => `
-    <button type="button" class="chip" data-squad-player="${p.playerId}" aria-pressed="${p.inSquad}">${p.name}</button>
+    <button type="button" class="chip" data-squad-player="${p.playerId}" aria-pressed="${p.inSquad}">${escapeHtml(p.name)}</button>
   `).join("");
 
   matchList.innerHTML = `
     <button type="button" id="result-back-btn" class="btn btn--ghost btn--sm" style="margin-bottom:12px;">← Back</button>
     <div class="card" data-sport="${team.sport}">
       <p class="label">${fixture.date} · ${fixture.is_home ? "Home" : "Away"}${fixture.competition ? " · " + fixture.competition : ""}</p>
-      <p class="stat-value" style="margin-top:6px;">vs ${fixture.opponent}</p>
+      <p class="stat-value" style="margin-top:6px;">vs ${escapeHtml(fixture.opponent)}</p>
     </div>
 
     <p class="label" style="margin-top:16px;">Full time</p>
     <div class="card" style="display:flex;gap:16px;">
       <div style="flex:1;text-align:center;">
-        <p class="label">${team.name}</p>
+        <p class="label">${escapeHtml(team.name)}</p>
         <div class="stepper stepper--lg" style="justify-content:center;margin-top:8px;">
           <button type="button" id="gf-minus">−</button>
           <output id="gf-output">${resultDraft.goalsFor}</output>
@@ -673,7 +673,7 @@ function renderResultScoreStep() {
         </div>
       </div>
       <div style="flex:1;text-align:center;">
-        <p class="label">${fixture.opponent}</p>
+        <p class="label">${escapeHtml(fixture.opponent)}</p>
         <div class="stepper stepper--lg" style="justify-content:center;margin-top:8px;">
           <button type="button" id="ga-minus">−</button>
           <output id="ga-output">${resultDraft.goalsAgainst}</output>
@@ -690,11 +690,11 @@ function renderResultScoreStep() {
 
     <div class="field" style="margin-top:16px;">
       <label class="label" for="result-venue">Venue (optional)</label>
-      <input type="text" id="result-venue" value="${resultDraft.venue}">
+      <input type="text" id="result-venue" value="${escapeHtml(resultDraft.venue)}">
     </div>
     <div class="field">
       <label class="label" for="result-kit">Kit (optional)</label>
-      <input type="text" id="result-kit" value="${resultDraft.kit}">
+      <input type="text" id="result-kit" value="${escapeHtml(resultDraft.kit)}">
     </div>
 
     <p class="label" id="result-squad-count-label" style="margin-top:16px;">Who played? (${squad.filter(p => p.inSquad).length})</p>
@@ -753,7 +753,7 @@ function renderResultScoreStep() {
   squad.push(entry);
 
   document.getElementById("result-squad-chips").insertAdjacentHTML("beforeend",
-    `<button type="button" class="chip" data-squad-player="${entry.playerId}" aria-pressed="true">${entry.name}</button>`);
+    `<button type="button" class="chip" data-squad-player="${entry.playerId}" aria-pressed="true">${escapeHtml(entry.name)}</button>`);
   document.getElementById("result-squad-count-label").textContent = `Who played? (${squad.filter(p => p.inSquad).length})`;
   input.value = "";
 });
@@ -779,7 +779,7 @@ function renderResultEventsStep() {
 
   const rows = squadIn.map(p => `
     <div class="card" style="margin-bottom:10px;">
-      <p class="stat-value" style="font-size:0.9rem;">${p.name}</p>
+      <p class="stat-value" style="font-size:0.9rem;">${escapeHtml(p.name)}</p>
       <div style="display:flex;gap:10px;margin-top:10px;">
         <div style="flex:1;">
           <p class="label">Goals</p>
@@ -854,11 +854,11 @@ function renderResultPublishStep() {
   const squadIn = resultDraft.squad.filter(p => p.inSquad);
 
   const voteRow = (category) => squadIn.map(p => `
-    <button type="button" class="chip" data-vote-player="${p.playerId}">${p.name}${p[category] ? ` (${p[category]})` : ""}</button>
+    <button type="button" class="chip" data-vote-player="${p.playerId}">${escapeHtml(p.name)}${p[category] ? ` (${p[category]})` : ""}</button>
   `).join("");
 
   const winnerChips = (winnerField) => squadIn.map(p => `
-    <button type="button" class="chip" data-winner-player="${p.playerId}" aria-pressed="${resultDraft[winnerField] === p.playerId}">${p.name}</button>
+    <button type="button" class="chip" data-winner-player="${p.playerId}" aria-pressed="${resultDraft[winnerField] === p.playerId}">${escapeHtml(p.name)}</button>
   `).join("");
 
   matchList.innerHTML = `

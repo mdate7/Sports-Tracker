@@ -370,7 +370,7 @@ function renderGymDetailHtml(match) {
 
   const groupsHtml = Object.entries(groups).map(([exercise, sets]) => `
     <div style="margin-top:14px;">
-      <p class="stat-value" style="font-size:0.95rem;">${exercise}</p>
+      <p class="stat-value" style="font-size:0.95rem;">${escapeHtml(exercise)}</p>
       ${sets.map(s => `
         <p class="label" style="margin-top:4px;">
           ${s.weight || 0}kg × ${s.reps || 0} reps${s.rounds && s.rounds > 1 ? ` × ${s.rounds} rounds` : ""}
@@ -384,7 +384,7 @@ function renderGymDetailHtml(match) {
       <div><span class="stat-value num">${match.sets.length}</span><p class="label">Sets</p></div>
       <div><span class="stat-value num">${distinctExercises}</span><p class="label">Exercises</p></div>
     </div>
-      ${focusAreas.length ? `<p class="label" style="margin-top:10px;">Focus areas</p><p class="stat-value" style="font-size:0.95rem;margin-top:2px;">${focusAreas.join(", ")}</p>` : ""}
+      ${focusAreas.length ? `<p class="label" style="margin-top:10px;">Focus areas</p><p class="stat-value" style="font-size:0.95rem;margin-top:2px;">${escapeHtml(focusAreas.join(", "))}</p>` : ""}
     ${groupsHtml}
   `;
 }
@@ -488,7 +488,7 @@ function renderProfileScreen() {
   matchList.innerHTML = `
   <div class="field">
   <label class="label" for="me-display-name">Display name</label>
-  <input type="text" id="me-display-name" value="${userProfile?.display_name || ""}">
+  <input type="text" id="me-display-name" value="${escapeHtml(userProfile?.display_name)}">
     </div>
     <div class="card">
       <p class="label">Sports you track</p>
@@ -566,12 +566,12 @@ function renderMatch(match) {
 
   const statBlocks = summaryFields.map(f => `
     <div>
-      <span class="stat-value num">${match[f.key]}</span>
+      <span class="stat-value num">${escapeHtml(match[f.key])}</span>
       <p class="label">${f.label}</p>
     </div>
   `).join("");
 
-  const detailRows = detailFields.map(f => `<li>${f.label}: ${match[f.key]}</li>`).join("");
+  const detailRows = detailFields.map(f => `<li>${f.label}: ${escapeHtml(match[f.key])}</li>`).join("");
   const golfBreakdown = match.sport === "golf" ? renderGolfDetailHtml(match) : "";
   const gymBreakdown = match.sport === "gym" ? renderGymDetailHtml(match) : "";
 
@@ -585,7 +585,7 @@ function renderMatch(match) {
     const cls = match.strokes > match.par ? "delta--neg" : "";
     hero = `<span class="delta num ${cls}">${diff}</span>`;
   } else if (match.sport === "gym") {
-    hero = `<span class="delta num">${match.sets.length} sets</span>`;
+    hero = `<span class="delta num">${(match.sets || []).length} sets</span>`;
   }
 
   const title = match.opponent || match.courseName || "";
@@ -593,7 +593,7 @@ function renderMatch(match) {
   card.innerHTML = `
     <div class="card-head">
       <div>
-        <p class="eyebrow">${sportNames[match.sport]} · ${title}</p>
+        <p class="eyebrow">${sportNames[match.sport]} · ${escapeHtml(title)}</p>
         <p class="card-meta">${match.date || ""}</p>
       </div>
       ${hero}
@@ -638,7 +638,7 @@ function renderInProgressCards() {
       <div class="card" data-sport="golf" data-resume="golf" style="cursor:pointer;">
         <div class="card-head">
           <div>
-            <p class="eyebrow">Golf · ${round.courseName || "In progress"}</p>
+            <p class="eyebrow">Golf · ${escapeHtml(round.courseName || "In progress")}</p>
             <p class="card-meta">Hole ${round.holeIndex + 1} of ${round.numHoles}</p>
           </div>
           <span class="chip" aria-pressed="true">Resume</span>
@@ -674,7 +674,7 @@ function renderPendingSelectionCards() {
       <div class="card" data-sport="football" data-log-selection="${sel.id}" style="cursor:pointer;">
         <div class="card-head">
           <div>
-            <p class="eyebrow">Football · ${fixture.opponent} (${fixture.is_home ? "H" : "A"})</p>
+            <p class="eyebrow">Football · ${escapeHtml(fixture.opponent)} (${fixture.is_home ? "H" : "A"})</p>
             <p class="card-meta">${fixture.date}</p>
           </div>
           <span class="chip" aria-pressed="true">Log match</span>
@@ -696,7 +696,15 @@ function renderList(list) {
     }
     return;
   }
-  sorted.forEach(renderMatch);
+  // One malformed row (e.g. a match whose detail row never saved) used to throw
+  // here and silently stop every older match from rendering. Skip just that one.
+  sorted.forEach((match) => {
+    try {
+      renderMatch(match);
+    } catch (err) {
+      console.error("Skipped a match that failed to render:", match, err);
+    }
+  });
 }
 
 function renderMatchDetailScreen() {
@@ -708,7 +716,7 @@ function renderMatchDetailScreen() {
 
   const statBlocks = summaryFields.map(f => `
     <div>
-      <span class="stat-value num">${match[f.key]}</span>
+      <span class="stat-value num">${escapeHtml(match[f.key])}</span>
       <p class="label">${f.label}</p>
     </div>
   `).join("");
@@ -723,7 +731,7 @@ const editButton = match.sport === "golf" || match.sport === "gym"
   matchList.innerHTML = `
     <div class="card" data-sport="${match.sport}">
       <button type="button" id="detail-back-btn" class="btn btn--ghost btn--sm" style="margin-bottom:12px;">← Back</button>
-      <p class="eyebrow">${sportNames[match.sport]} · ${title}</p>
+      <p class="eyebrow">${sportNames[match.sport]} · ${escapeHtml(title)}</p>
       <p class="card-meta">${match.date || ""}</p>
       <div class="stats" style="margin-top:12px;">${statBlocks}</div>
       ${golfBreakdown}

@@ -3,6 +3,21 @@ const SUPABASE_KEY = "sb_publishable_Lie3FVMBz9Y4Buwumkyn6g_Q0JSMj4s"; // paste 
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Everything is rendered with template strings into innerHTML, so any text a
+// person typed (names, opponents, notes, course names) has to be escaped first.
+// Otherwise a name like `O'Neil <3` breaks the markup, and a crafted one could
+// run script for every teammate who views it. Lives here because auth.js loads
+// first. null/undefined become "".
+function escapeHtml(value) {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 async function ensureSignedIn() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   return session ? session.user.id : null;

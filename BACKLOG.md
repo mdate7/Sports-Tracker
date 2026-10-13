@@ -8,10 +8,6 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Fixes and tidy-ups (found while setting up CLAUDE.md)
 
-- [ ] `golf.js` defines `renderHoleStep()` twice (around lines 124 and 179). The second definition silently wins, so the first is dead code. Remove it once the second is confirmed to be the one in use.
-- [ ] `renderList()` in `script.js` still runs `sorted.forEach(renderMatch)` with no per-item try/catch, so one bad row can still stop the rest of the feed rendering. The `(match.sets || [])` guard fixed the known case but not the general one.
-- [ ] `finishGolfRound()` and `finishGymSession()` only `console.error` when the `golf_details`/`gym_details` insert fails after the `matches` row is saved. Show the user an error and remove the orphaned `matches` row.
-- [ ] No HTML-escaping helper exists, so user-typed names and notes go into `innerHTML` raw. Add one small `escapeHtml()` and use it wherever user text is rendered.
 - [ ] Snapshot the full database schema into the repo (`supabase db pull`). Only the Sept 2026 team migrations are committed; the original tables live only in the Dashboard.
 - [ ] The CORS origin on both Edge Functions is `*`. Tighten it to `https://myclubhouse.org`.
 - [ ] Audit that every table the app writes to has RLS policies covering every operation it performs.
@@ -71,6 +67,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Done recently
 
+- [x] Robustness fixes: one bad row no longer breaks the feed; user-typed text is escaped everywhere it's rendered (`escapeHtml()` in auth.js); half-failed golf/gym saves are rolled back with a message instead of leaving orphaned rows; dead duplicate `renderHoleStep()` removed.
 - [x] Light mode: Dark / Light / Match phone setting on the Me screen, saved per device. Dark stays the default.
 - [x] Football results entry: score, venue and kit; squad; goals, assists and cards; MOTM/DOTD vote tally; optional add to your personal record.
 - [x] Ad-hoc (non-member) players on the team sheet and in result entry.

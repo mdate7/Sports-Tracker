@@ -121,51 +121,6 @@ async function handleScorecardUpload(file) {
 }
 
 
-function renderHoleStep() {
-  const { holeIndex, numHoles, holes } = golfRound;
-  const hole = holes[holeIndex];
-
-form.innerHTML = `
-  <p style="font-size:13px;color:var(--muted);">Hole ${holeIndex + 1} of ${numHoles}</p>
-  <div class="field">
-    <label class="label" for="hole-par">Par</label>
-    <input type="number" id="hole-par" value="${hole.par}">
-  </div>
-  <div class="field">
-    <label class="label" for="hole-strokes">Strokes</label>
-    <input type="number" id="hole-strokes" value="${hole.strokes}" required>
-  </div>
-  <div class="field">
-    <label class="label" for="hole-putts">Putts (optional)</label>
-    <input type="number" id="hole-putts" value="${hole.putts}">
-  </div>
-  <div class="hole-nav-row" style="display:flex; gap:8px;">
-    ${holeIndex > 0 ? `<button type="button" id="hole-back-btn" class="btn btn--ghost">Back</button>` : ""}
-    <button type="button" id="hole-next-btn" class="btn">${holeIndex === numHoles - 1 ? "Finish Round" : "Next Hole"}</button>
-  </div>
-`;
-
-  if (holeIndex > 0) {
-    document.getElementById("hole-back-btn").addEventListener("click", () => {
-      saveCurrentHoleInputs();
-      saveRoundProgress();
-      golfRound.holeIndex--;
-      renderHoleStep();
-    });
-  }
-
-  document.getElementById("hole-next-btn").addEventListener("click", () => {
-    saveCurrentHoleInputs();
-    saveRoundProgress();
-    if (holeIndex === numHoles - 1) {
-      finishGolfRound();
-    } else {
-      golfRound.holeIndex++;
-      renderHoleStep();
-    }
-  });
-}
-
 function getStrokeLabel(strokes, par) {
   if (!strokes || !par) return "";
   const diff = strokes - par;
@@ -297,7 +252,7 @@ function buildScorecardReview(parsed) {
     <p style="font-size:13px;color:var(--muted);">Check the extracted scores — anything highlighted needs a value.</p>
     <div class="field">
       <label class="label" for="review-course-name">Course Name</label>
-      <input type="text" id="review-course-name" value="${parsed.courseName || ""}">
+      <input type="text" id="review-course-name" value="${escapeHtml(parsed.courseName)}">
     </div>
     <div style="max-height:320px; overflow-y:auto; margin:12px 0;">${rowsHtml}</div>
     <button type="button" id="review-confirm-btn" class="btn">Looks Good, Continue</button>
@@ -373,11 +328,11 @@ function finishGolfRound() {
     </div>
     <div class="field">
       <label class="label" for="golf-played-with">Played With (optional)</label>
-      <input type="text" id="golf-played-with" value="${existing ? existing.playedWith ?? "" : ""}">
+      <input type="text" id="golf-played-with" value="${escapeHtml(existing?.playedWith)}">
     </div>
     <div class="field">
       <label class="label" for="golf-notes">Notes (optional)</label>
-      <input type="text" id="golf-notes" value="${existing ? existing.notes ?? "" : ""}">
+      <input type="text" id="golf-notes" value="${escapeHtml(existing?.notes)}">
     </div>
     <button type="button" id="golf-save-btn" class="btn" style="margin-top:8px;">${existing ? "Save Changes" : "Save Round"}</button>
   `;
@@ -414,16 +369,30 @@ function finishGolfRound() {
         .from("golf_details")
         .update({ course_name: golfRound.courseName, played_with: playedWithValue, strokes: totalStrokes, par: totalPar, holes_played: golfRound.numHoles })
         .eq("match_id", matchId);
-      if (detailError) console.error("Failed to update golf details:", detailError);
+      // An edit can't be rolled back, so say exactly what didn't save and leave
+      // the screen open so they can try again, instead of failing silently.
+      if (detailError) {
+        console.error("Failed to update golf details:", detailError);
+        alert("The round's date and notes saved, but the course and score didn't. Try saving again.");
+        return;
+      }
 
       const { error: deleteHolesError } = await supabaseClient.from("golf_holes").delete().eq("match_id", matchId);
-      if (deleteHolesError) console.error("Failed to clear old holes:", deleteHolesError);
+      if (deleteHolesError) {
+        console.error("Failed to clear old holes:", deleteHolesError);
+        alert("The round saved, but the hole-by-hole scores couldn't be updated. Try saving again.");
+        return;
+      }
 
       const holeRows = holes.map((h, index) => ({
         match_id: matchId, hole_number: index + 1, par: h.par, strokes: h.strokes, putts: h.putts
       }));
       const { error: holesError } = await supabaseClient.from("golf_holes").insert(holeRows);
-      if (holesError) console.error("Failed to save updated holes:", holesError);
+      if (holesError) {
+        console.error("Failed to save updated holes:", holesError);
+        alert("The round saved, but the hole-by-hole scores didn't. Try saving again.");
+        return;
+      }
 
     } else {
       const { data: matchRow, error: matchError } = await supabaseClient
@@ -440,13 +409,22 @@ function finishGolfRound() {
       const { error: detailError } = await supabaseClient
         .from("golf_details")
         .insert({ match_id: matchRow.id, course_name: golfRound.courseName, played_with: playedWithValue, strokes: totalStrokes, par: totalPar, holes_played: golfRound.numHoles });
-      if (detailError) console.error("Failed to save golf details:", detailError);
-
       const holeRows = holes.map((h, index) => ({
         match_id: matchRow.id, hole_number: index + 1, par: h.par, strokes: h.strokes, putts: h.putts
       }));
-      const { error: holesError } = await supabaseClient.from("golf_holes").insert(holeRows);
-      if (holesError) console.error("Failed to save hole-by-hole data:", holesError);
+      const { error: holesError } = detailError
+        ? { error: null }
+        : await supabaseClient.from("golf_holes").insert(holeRows);
+
+      // A matches row without its golf_details/holes is what used to break the
+      // feed. Undo the half-save (child rows go with it) and keep the round in
+      // progress so nothing typed is lost.
+      if (detailError || holesError) {
+        console.error("Failed to save round details:", detailError || holesError);
+        await supabaseClient.from("matches").delete().eq("id", matchRow.id);
+        alert("Something went wrong saving this round, so nothing was saved. Your scores are still here; try again.");
+        return;
+      }
 
       clearRoundProgress();
     }

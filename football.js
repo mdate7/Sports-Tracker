@@ -70,11 +70,11 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
     </div>
     <div class="field">
       <label class="label" for="opponent">Opponent</label>
-      <input type="text" id="opponent" value="${existingMatch?.opponent || draft?.opponent || (prefillFixture?.opponent) || ""}" required>
+      <input type="text" id="opponent" value="${escapeHtml(existingMatch?.opponent || draft?.opponent || prefillFixture?.opponent)}" required>
     </div>
     <div class="field">
       <label class="label" for="notes">Notes (optional)</label>
-      <input type="text" id="notes" value="${existingMatch?.notes || draft?.notes || ""}">
+      <input type="text" id="notes" value="${escapeHtml(existingMatch?.notes || draft?.notes)}">
     </div>
 
         ${fixtures.length > 0 ? `
@@ -82,7 +82,7 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
         <label class="label" for="fixture-select">Attach to fixture (optional)</label>
         <select id="fixture-select">
           <option value="">None</option>
-          ${fixtures.map(f => `<option value="${f.id}" ${(existingMatch?.fixtureId === f.id) || draft?.fixtureId === f.id || (prefillFixture?.id === f.id) ? "selected" : ""}>${f.opponent} · ${f.date}</option>`).join("")}
+          ${fixtures.map(f => `<option value="${f.id}" ${(existingMatch?.fixtureId === f.id) || draft?.fixtureId === f.id || (prefillFixture?.id === f.id) ? "selected" : ""}>${escapeHtml(f.opponent)} · ${f.date}</option>`).join("")}
         </select>
       </div>
     ` : ""}
