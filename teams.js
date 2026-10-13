@@ -42,63 +42,162 @@ async function loadTeamDetail(teamId) {
   return { ...team, members, fixtures: fixtures || [] };
 }
 
+// --- Team view helpers -------------------------------------------------------
+// Football seasons run August to July, so a game in Sep 2025 and one in
+// Mar 2026 are both "2025/26". Keyed by the starting year.
+function seasonStartYear(isoDate) {
+  const d = new Date(isoDate + "T00:00");
+  return d.getMonth() >= 7 ? d.getFullYear() : d.getFullYear() - 1;
+}
+function seasonLabel(startYear) {
+  return `${startYear}/${String(startYear + 1).slice(-2)}`;
+}
+function formatFixtureDate(isoDate, withYear = false) {
+  return new Date(isoDate + "T00:00").toLocaleDateString("en-GB", {
+    weekday: "short", day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {})
+  });
+}
+function fixtureIsPlayed(f) {
+  return f.goals_for !== null && f.goals_for !== undefined;
+}
+function fixtureOutcome(f) {
+  if (!fixtureIsPlayed(f)) return null;
+  if (f.goals_for > f.goals_against) return "W";
+  if (f.goals_for < f.goals_against) return "L";
+  return "D";
+}
+function opponentName(f) {
+  return f.opponent ? escapeHtml(f.opponent) : `<span style="color:var(--muted);">Unknown opponent</span>`;
+}
+
+// Which season the team view is showing; reset when a different team opens.
+let teamViewSeason = null;
+let teamViewSeasonTeamId = null;
+// Season player stats, cached per team+season so switching back is instant.
+const seasonStatsCache = new Map();
+
+async function loadSeasonPlayerStats(team, fixtures) {
+  const key = `${team.id}:${fixtures.map(f => f.id).join(",")}`;
+  if (seasonStatsCache.has(key)) return seasonStatsCache.get(key);
+
+  const ids = fixtures.filter(fixtureIsPlayed).map(f => f.id);
+  if (!ids.length) return [];
+  const [{ data: players, error: playersError }, { data: apps, error: appsError }] = await Promise.all([
+    supabaseClient.from("players").select("id, display_name").eq("team_id", team.id),
+    supabaseClient.from("fixture_appearances").select("player_id, goals, assists, is_motm, yellow_cards, red_card").in("fixture_id", ids)
+  ]);
+  if (playersError || appsError) {
+    console.error("Failed to load season stats:", playersError || appsError);
+    return null;
+  }
+
+  const byPlayer = new Map();
+  (apps || []).forEach(a => {
+    const row = byPlayer.get(a.player_id) || { apps: 0, goals: 0, assists: 0, motm: 0, cards: 0 };
+    row.apps += 1;
+    row.goals += a.goals || 0;
+    row.assists += a.assists || 0;
+    row.motm += a.is_motm ? 1 : 0;
+    row.cards += (a.yellow_cards || 0) + (a.red_card ? 1 : 0);
+    byPlayer.set(a.player_id, row);
+  });
+  const names = new Map((players || []).map(p => [p.id, p.display_name]));
+  const stats = [...byPlayer.entries()]
+    .map(([id, row]) => ({ id, name: names.get(id) || "Unknown player", ...row }))
+    .sort((x, y) => y.goals - x.goals || y.assists - x.assists || y.apps - x.apps || x.name.localeCompare(y.name));
+  seasonStatsCache.set(key, stats);
+  return stats;
+}
+
 async function renderTeamDetail() {
   const team = await loadTeamDetail(currentTeamId);
   if (!team) return;
+  // Results may have just been edited, so start every visit with fresh stats;
+  // the cache only exists to make flicking between seasons instant.
+  seasonStatsCache.clear();
+  // `team` is re-fetched on every render, so the permanent delegated listener
+  // for fixture buttons reads it from here rather than from a stale closure.
+  currentTeamDetail = team;
+  wireTeamFixtureClicks();
 
   const userId = await ensureSignedIn();
-  const membersHtml = team.members.map(m => `
-    <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
-      <span>${escapeHtml(m.profiles?.display_name || "Unnamed player")}</span>
-      <span class="label">${m.role}</span>
+  const today = todayISODate();
+  const upcoming = team.fixtures.filter(f => f.date >= today).sort((x, y) => x.date.localeCompare(y.date));
+  const past = team.fixtures.filter(f => f.date < today);
+  const next = upcoming[0];
+
+  const seasons = [...new Set(past.map(f => seasonStartYear(f.date)))].sort((x, y) => y - x);
+  if (teamViewSeasonTeamId !== team.id || !seasons.includes(teamViewSeason)) {
+    teamViewSeason = seasons[0] ?? null;
+    teamViewSeasonTeamId = team.id;
+  }
+
+  const nextHtml = next ? `
+    <div class="card team-next" data-sport="${team.sport}">
+      <p class="eyebrow">Next match · ${formatFixtureDate(next.date)}</p>
+      <p class="team-next__opp">${opponentName(next)}</p>
+      <p class="label" style="margin-top:6px;">${next.is_home ? "Home" : "Away"}${next.venue ? ` · ${escapeHtml(next.venue)}` : ""}${next.kit ? ` · ${escapeHtml(next.kit)} kit` : ""}</p>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button type="button" class="btn btn--sm" data-team-sheet-fixture="${next.id}" style="flex:1;">Team sheet</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-add-result-fixture="${next.id}" style="flex:1;">Add result</button>
+      </div>
+    </div>
+  ` : `
+    <div class="card"><p class="empty-state" style="padding:8px;">No upcoming fixtures.</p></div>
+  `;
+
+  const laterHtml = upcoming.slice(1).map(f => `
+    <div class="fixture-row">
+      <div class="fixture-row__main">
+        <p class="fixture-row__opp">${opponentName(f)} <span class="label">${f.is_home ? "H" : "A"}</span></p>
+        <p class="label">${formatFixtureDate(f.date)}</p>
+      </div>
+      <button type="button" class="btn btn--ghost btn--sm" data-team-sheet-fixture="${f.id}">Team sheet</button>
     </div>
   `).join("");
 
-  const today = todayISODate();
-  const upcoming = team.fixtures.filter(f => f.date >= today);
-  const past = team.fixtures.filter(f => f.date < today);
-
-  const fixtureRow = (f) => {
-    const played = f.goals_for !== null && f.goals_for !== undefined;
-    return `
-    <div style="padding:10px 0;border-bottom:1px solid var(--line);">
-      <div style="display:flex;justify-content:space-between;">
-        <div>
-          <p class="stat-value" style="font-size:0.9rem;">${escapeHtml(f.opponent)} (${f.is_home ? "H" : "A"})</p>
-          <p class="label" style="margin-top:2px;">${f.competition || ""}</p>
-        </div>
-        <span class="label">${f.date}</span>
-      </div>
-      ${played ? `<p class="delta num" style="margin-top:6px;">${f.goals_for}–${f.goals_against}</p>` : ""}
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button type="button" class="btn btn--ghost btn--sm" data-team-sheet-fixture="${f.id}" style="flex:1;">Team sheet</button>
-        <button type="button" class="btn btn--ghost btn--sm" data-add-result-fixture="${f.id}" style="flex:1;">${played ? "Edit result" : "Add result"}</button>
-      </div>
-    </div>
-  `;
-  };
-
   matchList.innerHTML = `
-    <div class="card" data-sport="${team.sport}">
-      <p class="stat-value">${escapeHtml(team.name)}</p>
-      <p class="label" style="margin-top:4px;">${sportNames[team.sport]} · Invite code: ${team.invite_code}</p>
+    <div class="team-head" data-sport="${team.sport}">
+      <p class="eyebrow">${sportNames[team.sport]}</p>
+      <h2 class="title" style="margin:4px 0 0;">${escapeHtml(team.name)}</h2>
     </div>
 
-    <p class="label" style="margin-top:16px;">Upcoming fixtures</p>
-    <div class="card">${upcoming.length ? upcoming.map(fixtureRow).join("") : `<p class="empty-state">None scheduled.</p>`}</div>
-    <button type="button" id="add-fixture-btn" class="btn btn--ghost btn--sm" style="margin-top:8px;">+ Add fixture</button>
+    ${nextHtml}
+    ${laterHtml ? `<div class="card" style="padding-top:4px;padding-bottom:4px;">${laterHtml}</div>` : ""}
+    <button type="button" id="add-fixture-btn" class="btn btn--ghost btn--sm">+ Add fixture</button>
 
-    ${past.length ? `
-      <p class="label" style="margin-top:16px;">Past fixtures</p>
-      <div class="card">${past.map(fixtureRow).join("")}</div>
+    ${seasons.length ? `
+      <p class="label section-label">Seasons</p>
+      <div class="rail" id="season-rail" style="padding-bottom:0;">
+        ${seasons.map(y => `<button type="button" class="chip" data-season="${y}" aria-pressed="${y === teamViewSeason}">${seasonLabel(y)}</button>`).join("")}
+      </div>
+      <div id="season-body"></div>
     ` : ""}
 
-    <p class="label" style="margin-top:16px;">Members (${team.members.length})</p>
-    <div class="card">${membersHtml}</div>
+    <details class="card team-members">
+      <summary class="label">Members (${team.members.length}) · Invite code <span class="num" style="color:var(--text);">${escapeHtml(team.invite_code)}</span></summary>
+      ${team.members.map(m => `
+        <div class="fixture-row">
+          <span>${escapeHtml(m.profiles?.display_name || "Unnamed player")}</span>
+          <span class="label">${escapeHtml(m.role)}</span>
+        </div>
+      `).join("")}
+    </details>
 
-    <button type="button" id="team-back-btn" class="btn btn--ghost" style="margin-top:16px;">Back to teams</button>
+    <button type="button" id="team-back-btn" class="btn btn--ghost" style="margin-top:4px;">Back to teams</button>
     <button type="button" id="team-leave-btn" class="btn btn--ghost" style="margin-top:10px;">Leave team</button>
   `;
+
+  if (seasons.length) {
+    renderSeasonBody(team, past);
+    document.getElementById("season-rail").addEventListener("click", (event) => {
+      const chip = event.target.closest("[data-season]");
+      if (!chip) return;
+      teamViewSeason = Number(chip.dataset.season);
+      document.querySelectorAll("#season-rail .chip").forEach(c => c.setAttribute("aria-pressed", c === chip ? "true" : "false"));
+      renderSeasonBody(team, past);
+    });
+  }
 
   document.getElementById("team-back-btn").addEventListener("click", () => {
     currentTeamId = null;
@@ -128,10 +227,89 @@ async function renderTeamDetail() {
     renderAddFixtureForm(team);
   });
 
-  // `team` is re-fetched on every render, so the permanent delegated listener
-  // below reads it from here rather than from a stale closure.
-  currentTeamDetail = team;
-  wireTeamFixtureClicks();
+}
+
+// The season part of the team view: summary, form, results and player stats.
+// Re-rendered on its own when the season chip changes, without re-fetching the team.
+async function renderSeasonBody(team, past) {
+  const body = document.getElementById("season-body");
+  if (!body) return;
+  const season = teamViewSeason;
+  const fixtures = past.filter(f => seasonStartYear(f.date) === season); // newest first
+  const played = fixtures.filter(fixtureIsPlayed);
+  const w = played.filter(f => fixtureOutcome(f) === "W").length;
+  const d = played.filter(f => fixtureOutcome(f) === "D").length;
+  const l = played.filter(f => fixtureOutcome(f) === "L").length;
+  const gf = played.reduce((sum, f) => sum + f.goals_for, 0);
+  const ga = played.reduce((sum, f) => sum + f.goals_against, 0);
+  const form = played.slice(0, 5).reverse(); // oldest → newest, reading left to right
+
+  const resultRows = fixtures.map(f => {
+    const outcome = fixtureOutcome(f);
+    return `
+      <button type="button" class="fixture-row fixture-row--result" data-add-result-fixture="${f.id}">
+        <span class="form-pip" data-outcome="${outcome || "none"}">${outcome || "–"}</span>
+        <span class="fixture-row__main">
+          <span class="fixture-row__opp">${opponentName(f)} <span class="label">${f.is_home ? "H" : "A"}</span></span>
+          <span class="label">${formatFixtureDate(f.date, true)}</span>
+        </span>
+        <span class="fixture-row__score num">${outcome ? `${f.goals_for}–${f.goals_against}` : `<span class="label">Add result</span>`}</span>
+      </button>
+    `;
+  }).join("");
+
+  body.innerHTML = `
+    <div class="card" data-sport="${team.sport}">
+      <div class="card-head">
+        <p class="label">${seasonLabel(season)} season</p>
+        <div class="form-strip" aria-label="Last ${form.length} results">
+          ${form.map(f => `<span class="form-pip" data-outcome="${fixtureOutcome(f)}">${fixtureOutcome(f)}</span>`).join("")}
+        </div>
+      </div>
+      <div class="stats">
+        <div><span class="stat-value num">${played.length}</span><p class="label">Played</p></div>
+        <div><span class="stat-value num">${w}–${d}–${l}</span><p class="label">W–D–L</p></div>
+        <div><span class="stat-value num">${gf}–${ga}</span><p class="label">Goals</p></div>
+        <div><span class="delta num ${gf - ga < 0 ? "delta--neg" : ""}">${gf - ga > 0 ? "+" : ""}${gf - ga}</span><p class="label">GD</p></div>
+      </div>
+    </div>
+
+    <p class="label section-label">Results</p>
+    <div class="card" style="padding-top:4px;padding-bottom:4px;">${resultRows}</div>
+
+    <p class="label section-label">Players</p>
+    <div class="card" id="season-stats"><p class="label">Loading…</p></div>
+  `;
+
+  const stats = await loadSeasonPlayerStats(team, fixtures);
+  // The person may have switched season while this was loading.
+  if (season !== teamViewSeason) return;
+  const statsEl = document.getElementById("season-stats");
+  if (!statsEl) return;
+  if (stats === null) {
+    statsEl.innerHTML = `<p class="empty-state" style="padding:8px;">Couldn't load player stats.</p>`;
+    return;
+  }
+  if (!stats.length) {
+    statsEl.innerHTML = `<p class="empty-state" style="padding:8px;">No appearances recorded this season.</p>`;
+    return;
+  }
+  statsEl.innerHTML = `
+    <table class="season-table">
+      <thead><tr><th>Player</th><th>Apps</th><th>G</th><th>A</th><th>MOTM</th></tr></thead>
+      <tbody>
+        ${stats.map(p => `
+          <tr>
+            <td>${escapeHtml(p.name)}</td>
+            <td class="num">${p.apps}</td>
+            <td class="num">${p.goals || ""}</td>
+            <td class="num">${p.assists || ""}</td>
+            <td class="num">${p.motm || ""}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
 }
 
 // One delegated listener for every fixture-row button, attached exactly once.
