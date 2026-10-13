@@ -5,7 +5,6 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 ## Next up
 
 - [ ] **Team view redesign.** The backfilled history makes its problems obvious. Agreed direction: group fixtures by season with the next fixture pinned at the top; a season summary and form strip; per-season player stats. Work towards the Claude Design files.
-- [ ] **Light mode toggle.** The light tokens already exist in `Clubhouse-tokens.css`, but `data-theme="dark"` is hard-coded on `<html>`. Add a toggle on the Me screen that flips `data-theme` and remembers the choice in localStorage. (Small, front-end only. A good first task for the new workflow.)
 
 ## Fixes and tidy-ups (found while setting up CLAUDE.md)
 
@@ -72,6 +71,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Done recently
 
+- [x] Light mode: Dark / Light / Match phone setting on the Me screen, saved per device. Dark stays the default.
 - [x] Football results entry: score, venue and kit; squad; goals, assists and cards; MOTM/DOTD vote tally; optional add to your personal record.
 - [x] Ad-hoc (non-member) players on the team sheet and in result entry.
 - [x] WhatsApp backfill of GCOBAFC history, Sep 2023 to Apr 2026 (done as a one-off).

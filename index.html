@@ -13,6 +13,40 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="Clubhouse-tokens.css">
   <link rel="stylesheet" href="style.css">
+  <script>
+    // Theme runs here, before the body paints, so a light-mode user never sees
+    // a flash of dark first. The choice ("dark" | "light" | "system") lives in
+    // localStorage on this device only. Dark stays the default for anyone who
+    // has never picked. applyTheme() is global so the Me screen can call it.
+    (function () {
+      const THEME_COLORS = { dark: "#0A0C0E", light: "#F4F5F3" };
+      const systemQuery = window.matchMedia("(prefers-color-scheme: light)");
+
+      function readThemePref() {
+        try { return localStorage.getItem("theme") || "dark"; } catch (e) { return "dark"; }
+      }
+
+      function paint(pref) {
+        const resolved = pref === "system" ? (systemQuery.matches ? "light" : "dark") : pref;
+        document.documentElement.setAttribute("data-theme", resolved);
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute("content", THEME_COLORS[resolved]);
+      }
+
+      window.applyTheme = function (pref) {
+        try { localStorage.setItem("theme", pref); } catch (e) { /* private mode: still apply for this visit */ }
+        paint(pref);
+      };
+      window.getThemePref = readThemePref;
+
+      // Only matters in "system" mode: follow the OS switching while the app is open.
+      systemQuery.addEventListener("change", () => {
+        if (readThemePref() === "system") paint("system");
+      });
+
+      paint(readThemePref());
+    })();
+  </script>
 </head>
 <body>
 

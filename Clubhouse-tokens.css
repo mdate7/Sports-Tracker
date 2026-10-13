@@ -66,24 +66,26 @@
 }
 
 /* ---- light mode: the alternative, not the default ----------------------- */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bg:          #F4F5F3;
-    --surface:     #FFFFFF;
-    --raised:      #EDEFEC;
-    --line:        rgba(0, 0, 0, .09);
-    --line-strong: rgba(0, 0, 0, .18);
-    --text:        #14181B;
-    --muted:       #636E74;
-    --faint:       #97A0A5;
-    --on-accent:   #0A0C0E;
-    /* accents drop ~.12 lightness so they hold contrast on white */
-    --football:    oklch(0.72 0.19 128);
-    --cricket:     oklch(0.66 0.16  58);
-    --golf:        oklch(0.63 0.13 205);
-    --gym:         oklch(0.58 0.17 330);
-    --negative:    oklch(0.55 0.17  28);
-  }
+/* Applied by the inline script in index.html's <head>: "system" is resolved
+   to light or dark in JS (and follows the OS live), so there is only ONE copy
+   of the light values here instead of one in a media query and one for the
+   explicit choice. */
+:root[data-theme="light"] {
+  --bg:          #F4F5F3;
+  --surface:     #FFFFFF;
+  --raised:      #EDEFEC;
+  --line:        rgba(0, 0, 0, .09);
+  --line-strong: rgba(0, 0, 0, .18);
+  --text:        #14181B;
+  --muted:       #636E74;
+  --faint:       #97A0A5;
+  --on-accent:   #0A0C0E;
+  /* accents drop ~.12 lightness so they hold contrast on white */
+  --football:    oklch(0.72 0.19 128);
+  --cricket:     oklch(0.66 0.16  58);
+  --golf:        oklch(0.63 0.13 205);
+  --gym:         oklch(0.58 0.17 330);
+  --negative:    oklch(0.55 0.17  28);
 }
 [data-theme="light"] { color-scheme: light; }
 [data-theme="dark"]  { color-scheme: dark; }
@@ -179,7 +181,7 @@ a:hover { color: var(--text); }
   font: 700 .6875rem var(--font-ui);
   letter-spacing: .06em;
 }
-.verdict--draw { background: rgba(237,241,243,.18); color: var(--text); }
+.verdict--draw { background: color-mix(in oklab, var(--text) 18%, transparent); color: var(--text); }
 .verdict--loss { background: var(--negative); }
 
 /* a sentence of insight, in accent — max one per card */
@@ -214,7 +216,7 @@ a:hover { color: var(--text); }
 .form-guide span {
   width: 14px; height: 14px; border-radius: 4px;
   font: 700 .5rem/14px var(--font-ui); text-align: center;
-  background: rgba(237,241,243,.18); color: var(--text);
+  background: color-mix(in oklab, var(--text) 18%, transparent); color: var(--text);
 }
 .form-guide .w { background: var(--sport); color: var(--on-accent); }
 .form-guide .l { background: var(--negative); color: var(--on-accent); }
@@ -222,7 +224,7 @@ a:hover { color: var(--text); }
 /* hole-by-hole / per-unit strip. Height encodes strokes, colour encodes
    relation to par. Reusable for any per-unit breakdown (overs, sets, rounds). */
 .strip { display: flex; gap: 2px; align-items: flex-end; height: 34px; }
-.strip i { flex: 1; border-radius: 2px; background: rgba(237,241,243,.16); }
+.strip i { flex: 1; border-radius: 2px; background: color-mix(in oklab, var(--text) 16%, transparent); }
 .strip i[data-v="under"] { height: 35%;  background: var(--sport); }
 .strip i[data-v="par"]   { height: 60%; background: rgba(2, 165, 246, 0.16); }
 .strip i[data-v="over"]  { height: 85%;  background: rgba(189, 118, 3, 0.32); }
@@ -327,7 +329,7 @@ a:hover { color: var(--text); }
 
 /* segmented progress: one segment per step, pinned under the header */
 .progress { display: flex; gap: 2px; padding: var(--s-4) var(--gutter) 0; }
-.progress i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,.13); }
+.progress i { flex: 1; height: 3px; border-radius: 2px; background: color-mix(in oklab, var(--text) 13%, transparent); }
 .progress i[data-done] { background: var(--sport); }
 .progress i[data-now]  { background: var(--text); }
 

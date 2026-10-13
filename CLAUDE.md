@@ -37,7 +37,7 @@ Most of these were created in the Supabase Dashboard before migrations were used
 ## Conventions
 
 - **Design tokens only.** Use `var(--…)` from `Clubhouse-tokens.css` for colour, spacing, type and radius; never hard-code hex values. Sport accent colour comes from a `data-sport="golf|gym|football|cricket"` attribute on a container. Reuse the existing classes (`.btn`, `.btn--ghost`, `.btn--sm`, `.chip`, `.field`, `.label`, `.rail`, `.wizard`, `.track`) before adding new ones.
-- **Theme:** `<html data-theme="dark">` is hard-coded. Light-mode tokens exist but nothing switches to them yet.
+- **Theme:** an inline script in `index.html`'s `<head>` sets `data-theme` on `<html>` before paint, from a per-device localStorage choice (`dark` by default, `light`, or `system`). Light tokens live in `:root[data-theme="light"]`. For translucent fills, mix from `var(--text)` (`color-mix(in oklab, var(--text) 16%, transparent)`) rather than a fixed white rgba, so they hold up in both themes.
 - **Full-screen entry flows** go through `openScreen(title)` and `closeEntryScreen()`. Use them for any new wizard so the header and back button behave consistently.
 - **Rendering** is template strings written into `innerHTML`, with listeners wired afterwards. Before attaching a listener, check that a re-render can't attach a duplicate. Duplicate listeners from stale code have caused bugs before.
 - **One bad row must not break the feed.** Guard optional joins (`(match.sets || []).length`). Per-item render loops should not let one throw kill the rest.
