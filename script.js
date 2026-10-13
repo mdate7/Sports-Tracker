@@ -484,6 +484,7 @@ function buildForm(sport, existingMatch = null) {
 
 function renderProfileScreen() {
   const tracked = userProfile ? userProfile.sports_tracked : [];
+  const themePref = getThemePref();
   matchList.innerHTML = `
   <div class="field">
   <label class="label" for="me-display-name">Display name</label>
@@ -501,7 +502,26 @@ function renderProfileScreen() {
       <button type="button" id="me-signout-btn" class="btn btn--ghost" style="margin-top:12px;">Sign out</button>
       <p id="me-status" class="tiny" style="color:var(--muted);margin-top:10px;"></p>
     </div>
+    <div class="card">
+      <p class="label">Appearance</p>
+      <div class="rail" id="me-theme" style="flex-wrap:wrap;margin-top:10px;">
+        <button type="button" class="chip" data-theme-option="dark" aria-pressed="${themePref === "dark"}">Dark</button>
+        <button type="button" class="chip" data-theme-option="light" aria-pressed="${themePref === "light"}">Light</button>
+        <button type="button" class="chip" data-theme-option="system" aria-pressed="${themePref === "system"}">Match phone</button>
+      </div>
+    </div>
   `;
+
+  // Takes effect immediately and is saved per device, so it sits outside the
+  // profile Save button (which writes to Supabase).
+  document.getElementById("me-theme").addEventListener("click", (event) => {
+    const chip = event.target.closest(".chip");
+    if (!chip) return;
+    applyTheme(chip.dataset.themeOption);
+    document.querySelectorAll("#me-theme .chip").forEach((c) => {
+      c.setAttribute("aria-pressed", c === chip ? "true" : "false");
+    });
+  });
 
   document.getElementById("me-sports").addEventListener("click", (event) => {
     const chip = event.target.closest(".chip");
