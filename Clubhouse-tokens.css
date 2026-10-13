@@ -226,8 +226,10 @@ a:hover { color: var(--text); }
 .strip { display: flex; gap: 2px; align-items: flex-end; height: 34px; }
 .strip i { flex: 1; border-radius: 2px; background: color-mix(in oklab, var(--text) 16%, transparent); }
 .strip i[data-v="under"] { height: 35%;  background: var(--sport); }
-.strip i[data-v="par"]   { height: 60%; background: rgba(2, 165, 246, 0.16); }
-.strip i[data-v="over"]  { height: 85%;  background: rgba(189, 118, 3, 0.32); }
+/* par is deliberately neutral: it used to be a faint blue that sat too close
+   to the golf accent (birdie), which made the two hard to tell apart. */
+.strip i[data-v="par"]   { height: 60%; background: color-mix(in oklab, var(--text) 26%, transparent); }
+.strip i[data-v="over"]  { height: 85%;  background: color-mix(in oklab, var(--negative) 45%, transparent); }
 .strip i[data-v="worse"] { height: 100%; background: var(--negative); }
 
 /* ==========================================================================

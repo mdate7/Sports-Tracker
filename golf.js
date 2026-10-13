@@ -232,6 +232,24 @@ function buildStrip(holes) {
   return holes.map(h => `<i data-v="${getHoleState(h)}"></i>`).join("");
 }
 
+// Traditional scorecard marks: circle = birdie, double circle = eagle or
+// better, square = bogey, filled square = double bogey or worse. Shape carries
+// the meaning, so it reads at a glance and doesn't rely on colour alone.
+function getScoreMark(strokes, par) {
+  if (!strokes) return "missing";
+  if (!par) return "par";
+  const diff = strokes - par;
+  if (diff <= -2) return "eagle";
+  if (diff === -1) return "birdie";
+  if (diff === 0) return "par";
+  if (diff === 1) return "bogey";
+  return "double";
+}
+
+function formatVsPar(diff) {
+  return diff === 0 ? "E" : diff > 0 ? `+${diff}` : `${diff}`;
+}
+
 function buildScorecardReview(parsed) {
   const holes = parsed.holes.map(h => ({
     par: h.par ?? "",
@@ -239,38 +257,101 @@ function buildScorecardReview(parsed) {
     putts: h.putts ?? ""
   }));
 
-  const rowsHtml = holes.map((h, i) => `
-    <div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
-      <span class="label" style="width:28px;">#${i + 1}</span>
-      <input type="number" class="review-par" data-i="${i}" placeholder="Par" value="${h.par}" style="width:60px;">
-      <input type="number" class="review-strokes" data-i="${i}" placeholder="Strokes" value="${h.strokes}" style="width:70px; ${h.strokes === "" ? "border:1px solid var(--negative);" : ""}">
-      <input type="number" class="review-putts" data-i="${i}" placeholder="Putts" value="${h.putts}" style="width:60px;">
+  // Front 9 / back 9, like a paper card. A 9-hole round is just one section.
+  const nines = holes.length > 9
+    ? [{ label: "Front 9", total: "Out", from: 0, to: 9 }, { label: "Back 9", total: "In", from: 9, to: holes.length }]
+    : [{ label: `${holes.length} holes`, total: "Total", from: 0, to: holes.length }];
+
+  const rowHtml = (h, i) => `
+    <div class="sc-row" data-i="${i}">
+      <span class="sc-hole num">${i + 1}</span>
+      <input type="number" inputmode="numeric" class="sc-input review-par" data-i="${i}" value="${h.par}" aria-label="Hole ${i + 1} par">
+      <span class="score-mark" data-mark="${getScoreMark(Number(h.strokes), Number(h.par))}">
+        <input type="number" inputmode="numeric" class="sc-input review-strokes" data-i="${i}" value="${h.strokes}" placeholder="?" aria-label="Hole ${i + 1} score">
+      </span>
+      <input type="number" inputmode="numeric" class="sc-input review-putts" data-i="${i}" value="${h.putts}" aria-label="Hole ${i + 1} putts">
     </div>
+  `;
+
+  const ninesHtml = nines.map((n, idx) => `
+    <section class="nine" data-from="${n.from}" data-to="${n.to}" data-total-label="${n.total}">
+      <div class="nine-head">
+        <p class="label">${n.label}</p>
+        <p class="label num nine-total" id="nine-total-${idx}"></p>
+      </div>
+      <div class="sc-row sc-row--head" aria-hidden="true">
+        <span>Hole</span><span>Par</span><span>Score</span><span>Putts</span>
+      </div>
+      ${holes.slice(n.from, n.to).map((h, j) => rowHtml(h, n.from + j)).join("")}
+    </section>
   `).join("");
 
+  form.dataset.sport = "golf";
   form.innerHTML = `
-    <p style="font-size:13px;color:var(--muted);">Check the extracted scores — anything highlighted needs a value.</p>
+    <p class="label">Check your scorecard</p>
+    <p id="review-summary" style="font:var(--t-body);color:var(--muted);margin:4px 0 14px;"></p>
     <div class="field">
-      <label class="label" for="review-course-name">Course Name</label>
+      <label class="label" for="review-course-name">Course</label>
       <input type="text" id="review-course-name" value="${escapeHtml(parsed.courseName)}">
     </div>
-    <div style="max-height:320px; overflow-y:auto; margin:12px 0;">${rowsHtml}</div>
-    <button type="button" id="review-confirm-btn" class="btn">Looks Good, Continue</button>
-    <button type="button" id="review-cancel-btn" class="btn btn--ghost" style="margin-top:8px;">Start Over</button>
+    <div class="sc-total">
+      <div><span class="stat-value num" id="review-total-strokes">–</span><p class="label">Score</p></div>
+      <div><span class="delta num" id="review-total-vs-par">–</span><p class="label">vs par</p></div>
+    </div>
+    ${ninesHtml}
+    <div class="sc-legend" aria-hidden="true">
+      <span><i class="score-mark" data-mark="eagle"></i>Eagle</span>
+      <span><i class="score-mark" data-mark="birdie"></i>Birdie</span>
+      <span><i class="score-mark" data-mark="bogey"></i>Bogey</span>
+      <span><i class="score-mark" data-mark="double"></i>Double+</span>
+    </div>
+    <button type="button" id="review-confirm-btn" class="btn">Looks good, continue</button>
+    <button type="button" id="review-cancel-btn" class="btn btn--ghost" style="margin-top:8px;">Start over</button>
   `;
+
+  const readHoles = () => holes.map((_, i) => ({
+    par: Number(form.querySelector(`.review-par[data-i="${i}"]`).value) || "",
+    strokes: Number(form.querySelector(`.review-strokes[data-i="${i}"]`).value) || "",
+    putts: Number(form.querySelector(`.review-putts[data-i="${i}"]`).value) || ""
+  }));
+
+  // Recompute marks, subtotals and the "still missing" count on every edit,
+  // so fixing the AI's misreads gives instant feedback.
+  const refresh = () => {
+    const current = readHoles();
+    current.forEach((h, i) => {
+      form.querySelector(`.review-strokes[data-i="${i}"]`).parentElement.dataset.mark = getScoreMark(h.strokes, h.par);
+    });
+    form.querySelectorAll(".nine").forEach((section, idx) => {
+      const slice = current.slice(Number(section.dataset.from), Number(section.dataset.to));
+      const strokes = slice.reduce((sum, h) => sum + (h.strokes || 0), 0);
+      const scoredPar = slice.reduce((sum, h) => sum + (h.strokes && h.par ? h.par : 0), 0);
+      document.getElementById(`nine-total-${idx}`).textContent =
+        `${section.dataset.totalLabel} ${strokes || "–"}${scoredPar ? ` · ${formatVsPar(strokes - scoredPar)}` : ""}`;
+    });
+    const total = current.reduce((sum, h) => sum + (h.strokes || 0), 0);
+    const scoredPar = current.reduce((sum, h) => sum + (h.strokes && h.par ? h.par : 0), 0);
+    document.getElementById("review-total-strokes").textContent = total || "–";
+    const vs = document.getElementById("review-total-vs-par");
+    vs.textContent = scoredPar ? formatVsPar(total - scoredPar) : "–";
+    vs.classList.toggle("delta--neg", total > scoredPar);
+    const missing = current.filter(h => !h.strokes).length;
+    document.getElementById("review-summary").textContent = missing
+      ? `${missing} hole${missing === 1 ? "" : "s"} still need${missing === 1 ? "s" : ""} a score. They're marked with ?.`
+      : "All holes read. Check anything that looks off, then continue.";
+  };
+  form.querySelectorAll(".sc-input").forEach(input => input.addEventListener("input", refresh));
+  refresh();
 
   document.getElementById("review-cancel-btn").addEventListener("click", buildGolfSetup);
 
   document.getElementById("review-confirm-btn").addEventListener("click", () => {
-    const updatedHoles = holes.map((_, i) => ({
-      par: Number(document.querySelector(`.review-par[data-i="${i}"]`).value) || "",
-      strokes: Number(document.querySelector(`.review-strokes[data-i="${i}"]`).value) || "",
-      putts: Number(document.querySelector(`.review-putts[data-i="${i}"]`).value) || ""
-    }));
-
-    const missingStrokes = updatedHoles.some(h => h.strokes === "");
-    if (missingStrokes) {
-      alert("Every hole needs a strokes value before continuing.");
+    const updatedHoles = readHoles();
+    const firstMissing = updatedHoles.findIndex(h => h.strokes === "");
+    if (firstMissing !== -1) {
+      const input = form.querySelector(`.review-strokes[data-i="${firstMissing}"]`);
+      input.scrollIntoView({ block: "center", behavior: "smooth" });
+      input.focus();
       return;
     }
 

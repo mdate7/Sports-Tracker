@@ -124,3 +124,99 @@
   justify-content: center;
   line-height: 1;
 }
+/* --- Golf scorecard review ---
+   Laid out like a paper card: front 9 / back 9 with Out / In subtotals.
+   Score marks follow scorecard convention so shape, not just colour, says
+   how the hole went: circle birdie, double circle eagle, square bogey,
+   filled square double bogey or worse. */
+
+.sc-total {
+  display: flex;
+  gap: var(--s-6);
+  margin: var(--s-2) 0 var(--s-4);
+}
+
+.nine {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: var(--s-3) var(--s-3) var(--s-2);
+  margin-bottom: var(--s-3);
+}
+
+.nine-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0 var(--s-1) var(--s-2);
+}
+.nine-total { color: var(--text); }
+
+.sc-row {
+  display: grid;
+  grid-template-columns: 2.25rem 1fr 1fr 1fr;
+  align-items: center;
+  justify-items: center;
+  gap: var(--s-1);
+  padding: 2px 0;
+  border-top: 1px solid var(--line);
+}
+.sc-row--head {
+  border-top: 0;
+  font: var(--t-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-bottom: var(--s-1);
+}
+.sc-hole { font: var(--t-value); color: var(--muted); }
+
+.sc-input {
+  width: var(--tap-min);
+  height: var(--tap-min);
+  padding: 0;
+  text-align: center;
+  font: var(--t-value);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-badge);
+  -moz-appearance: textfield;
+}
+.sc-input::-webkit-outer-spin-button,
+.sc-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.sc-input:focus { outline: 2px solid var(--sport); outline-offset: -2px; background: var(--raised); }
+.sc-input::placeholder { color: var(--negative); font-weight: 700; }
+
+/* the mark is drawn by the wrapper, so it works for inputs and legend dots */
+.score-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 2px solid transparent;
+}
+.score-mark .sc-input { width: 100%; height: 100%; border-radius: inherit; }
+.score-mark[data-mark="birdie"] { border-color: var(--sport); border-radius: 50%; }
+.score-mark[data-mark="eagle"] {
+  border-color: var(--sport);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--sport);
+}
+.score-mark[data-mark="bogey"] { border-color: var(--muted); border-radius: 4px; }
+.score-mark[data-mark="double"] { background: var(--negative); border-color: var(--negative); border-radius: 4px; }
+.score-mark[data-mark="double"] .sc-input { color: var(--on-accent); }
+.score-mark[data-mark="missing"] { border: 2px dashed var(--negative); border-radius: 4px; }
+
+.sc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+  margin: var(--s-1) 0 var(--s-4);
+  font: var(--t-body);
+  color: var(--muted);
+}
+.sc-legend span { display: inline-flex; align-items: center; gap: var(--s-2); }
+.sc-legend .score-mark { width: 14px; height: 14px; }
+.sc-legend .score-mark[data-mark="eagle"] { box-shadow: 0 0 0 1px var(--bg), 0 0 0 3px var(--sport); }
