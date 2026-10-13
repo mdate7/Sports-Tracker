@@ -27,7 +27,6 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Golf
 
-- [ ] Scorecard review screen: split into front 9 and back 9, overhaul the layout, and make the birdie/par colours more distinct. Open question: give birdie and eagle their own accent colours, or just stronger contrast on the existing states?
 - [ ] Multi-person scores
 - [ ] Stroke indexes and handicaps
 - [ ] Stableford scoring
@@ -67,6 +66,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Done recently
 
+- [x] Golf scorecard review: front 9 / back 9 with Out/In subtotals and live totals, traditional score marks (circle birdie, double circle eagle, square bogey, filled square double+), missing holes marked and jumped to. Strip colours: par is now neutral so birdies stand out. (Answers the birdie/eagle question: shapes rather than more accent colours.)
 - [x] Robustness fixes: one bad row no longer breaks the feed; user-typed text is escaped everywhere it's rendered (`escapeHtml()` in auth.js); half-failed golf/gym saves are rolled back with a message instead of leaving orphaned rows; dead duplicate `renderHoleStep()` removed.
 - [x] Light mode: Dark / Light / Match phone setting on the Me screen, saved per device. Dark stays the default.
 - [x] Football results entry: score, venue and kit; squad; goals, assists and cards; MOTM/DOTD vote tally; optional add to your personal record.
