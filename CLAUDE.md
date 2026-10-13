@@ -16,8 +16,8 @@ A personal multi-sport tracker (football, golf, gym, cricket, plus teams), live 
 | File | What lives there |
 |---|---|
 | `index.html` | App shell: auth and onboarding screens, sport filter rail, `#match-list`, `#match-form`, bottom tab bar. Script load order matters: supabase-js, then auth, football, golf, gym, teams, script. |
-| `script.js` | Supabase client, service worker registration, loading and flattening matches, feed rendering (`renderMatch`, `renderList`, `renderView`), `openScreen()`/`closeScreen()`/`closeEntryScreen()`, the generic form builder, the profile screen, edit/delete, `init()`. |
-| `auth.js` | `ensureSignedIn`, `loadProfile`, onboarding (sport picker). |
+| `script.js` | Service worker registration, loading and flattening matches, feed rendering (`renderMatch`, `renderList`, `renderView`), `openScreen()`/`closeScreen()`/`closeEntryScreen()`, the generic form builder, the profile screen, edit/delete, `init()`. |
+| `auth.js` | Loads first. The Supabase client (`supabaseClient`), the shared `escapeHtml()` helper, `ensureSignedIn`, `loadProfile`, onboarding (sport picker). |
 | `football.js` | Personal football match form, plus drafts saved to localStorage. |
 | `golf.js` | Golf setup, hole-by-hole entry, scorecard photo upload (`handleScorecardUpload` → `parse-scorecard`), scorecard review, `finishGolfRound`. |
 | `gym.js` | Gym session and set entry, `finishGymSession`. |
@@ -42,7 +42,7 @@ Most of these were created in the Supabase Dashboard before migrations were used
 - **Rendering** is template strings written into `innerHTML`, with listeners wired afterwards. Before attaching a listener, check that a re-render can't attach a duplicate. Duplicate listeners from stale code have caused bugs before.
 - **One bad row must not break the feed.** Guard optional joins (`(match.sets || []).length`). Per-item render loops should not let one throw kill the rest.
 - **Saves that touch two tables** (a `matches` row plus its `*_details` row) need the second insert's failure surfaced to the user, not just `console.error`. Orphaned rows have come from this before.
-- **Escape anything user-typed** before it goes into `innerHTML`: player names, opponent names, notes.
+- **Escape anything user-typed** with `escapeHtml()` before it goes into `innerHTML`: player names, opponents, team and course names, venues, notes, and values in `value="…"` attributes.
 - **Comments explain *why*,** as in `sw.js`.
 
 ## Supabase rules
