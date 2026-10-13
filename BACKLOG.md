@@ -4,7 +4,6 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Next up
 
-- [ ] **Team view redesign.** The backfilled history makes its problems obvious. Agreed direction: group fixtures by season with the next fixture pinned at the top; a season summary and form strip; per-season player stats. Work towards the Claude Design files.
 
 ## Fixes and tidy-ups (found while setting up CLAUDE.md)
 
@@ -65,6 +64,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Done recently
 
+- [x] Team view redesign: next match pinned with team sheet/result buttons, season chips (Aug–Jul), season summary with W–D–L, goals, GD and a last-5 form strip, tappable results list, per-season player table (apps, goals, assists, MOTM). Members tucked into a collapsible section. (Built without access to the Claude Design files.)
 - [x] Goal-by-goal result entry: Goal 1 → scorer / assist dropdowns from the squad, with own goals and "not sure"; cards as one compact line per player.
 - [x] Golf scorecard review: front 9 / back 9 with Out/In subtotals and live totals, traditional score marks (circle birdie, double circle eagle, square bogey, filled square double+), missing holes marked and jumped to. Strip colours: par is now neutral so birdies stand out. (Answers the birdie/eagle question: shapes rather than more accent colours.)
 - [x] Robustness fixes: one bad row no longer breaks the feed; user-typed text is escaped everywhere it's rendered (`escapeHtml()` in auth.js); half-failed golf/gym saves are rolled back with a message instead of leaving orphaned rows; dead duplicate `renderHoleStep()` removed.

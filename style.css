@@ -255,3 +255,79 @@
 .card-row:first-child { border-top: 0; padding-top: 0; }
 .card-row:last-child { padding-bottom: 0; }
 .card-row .chips { flex-wrap: nowrap; }
+
+/* --- Team view --- */
+
+.team-head { padding: var(--s-1) 0 0; }
+
+.team-next__opp {
+  font: var(--t-title);
+  letter-spacing: var(--track-tight);
+  margin: var(--s-2) 0 0;
+}
+
+#season-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+.section-label { margin: var(--s-3) 0 calc(var(--s-2) - var(--s-3)); }
+
+/* a fixture or result line inside a card; also used as a full-width button */
+.fixture-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  padding: var(--s-3) 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+  font: var(--t-value);
+  text-align: left;
+}
+.fixture-row:first-child { border-top: 0; }
+.fixture-row--result { cursor: pointer; min-height: var(--tap-min); }
+.fixture-row--result:active { background: var(--raised); }
+.fixture-row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fixture-row__opp { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fixture-row__score { font: var(--t-card); font-variant-numeric: tabular-nums; }
+.fixture-row .btn { width: auto; }
+
+/* W / D / L pips: accent for a win, neutral draw, negative loss */
+.form-strip { display: flex; gap: 4px; }
+.form-pip {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font: 700 .625rem var(--font-data);
+  background: color-mix(in oklab, var(--text) 18%, transparent);
+  color: var(--text);
+}
+.form-pip[data-outcome="W"] { background: var(--sport); color: var(--on-accent); }
+.form-pip[data-outcome="L"] { background: var(--negative); color: var(--on-accent); }
+.form-pip[data-outcome="none"] { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
+
+.season-table { width: 100%; border-collapse: collapse; font: var(--t-body); }
+.season-table th {
+  font: var(--t-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: right;
+  padding: 0 0 var(--s-2);
+}
+.season-table td { padding: 7px 0; border-top: 1px solid var(--line); text-align: right; }
+.season-table th:first-child, .season-table td:first-child { text-align: left; }
+.season-table td:first-child { font-weight: 600; }
+.season-table th + th, .season-table td + td { width: 3.25rem; }
+
+.team-members summary { cursor: pointer; list-style: none; }
+.team-members summary::-webkit-details-marker { display: none; }
+.team-members summary::after { content: " ▾"; }
+.team-members[open] summary { margin-bottom: var(--s-2); }
+.team-members .fixture-row { font: var(--t-body); justify-content: space-between; }
