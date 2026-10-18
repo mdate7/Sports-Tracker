@@ -15,12 +15,13 @@ A personal multi-sport tracker (football, golf, gym, cricket, plus teams), live 
 
 | File | What lives there |
 |---|---|
-| `index.html` | App shell: auth and onboarding screens, sport filter rail, `#match-list`, `#match-form`, bottom tab bar. Script load order matters: supabase-js, then auth, football, golf, gym, teams, script. |
+| `index.html` | App shell: auth and onboarding screens, sport filter rail, `#match-list`, `#match-form`, bottom tab bar. Script load order matters: supabase-js, then auth, football, golf, gym, teams, social, script. |
 | `script.js` | Service worker registration, loading and flattening matches, feed rendering (`renderMatch`, `renderList`, `renderView`), `openScreen()`/`closeScreen()`/`closeEntryScreen()`, the generic form builder, the profile screen, edit/delete, `init()`. |
 | `auth.js` | Loads first. The Supabase client (`supabaseClient`), the shared `escapeHtml()` helper, `ensureSignedIn`, `loadProfile`, onboarding (sport picker). |
 | `football.js` | Personal football match form, plus drafts saved to localStorage. |
 | `golf.js` | Golf setup, hole-by-hole entry, scorecard photo upload (`handleScorecardUpload` → `parse-scorecard`), scorecard review, `finishGolfRound`. |
 | `gym.js` | Gym session and set entry (each set is `measure: "reps"` or `"time"`), repeat-a-session, `finishGymSession`. |
+| `social.js` | Following: `loadFollows`, `followPerson`/`unfollowPerson`, the Following feed (`feedScope`, `renderFollowingFeed`, read-only `friendMatchCardHtml`), and the People screen (`meSubView === "people"`). Loads before `script.js`, so it can't use `script.js` globals at load time, only inside functions. |
 | `teams.js` | Teams, invites, fixtures, team sheets, ad-hoc players (`ensurePlayersForTeam`), and the three-step result entry flow (`renderResultScoreStep` → `renderResultEventsStep` → `renderResultPublishStep` → `publishResult`). |
 | `Clubhouse-tokens.css` | The "Floodlight" design system: CSS custom-property tokens, dark-first, with light-mode tokens present. |
 | `style.css` | Small app-specific overrides. |
@@ -30,7 +31,7 @@ A personal multi-sport tracker (football, golf, gym, cricket, plus teams), live 
 
 ## Data model (tables the client touches)
 
-`profiles`, `matches` (one row per personal activity), `football_details` / `golf_details` / `gym_details` (one detail row per match), `golf_holes`, `gym_sets`, `courses`, `teams`, `team_members`, `fixtures`, `team_sheets`, `team_sheet_selections`, `players`, `fixture_appearances`.
+`profiles`, `matches` (one row per personal activity), `football_details` / `golf_details` / `gym_details` (one detail row per match), `golf_holes`, `gym_sets`, `courses`, `teams`, `team_members`, `fixtures`, `team_sheets`, `team_sheet_selections`, `players`, `fixture_appearances`, `follows` (follower_id → followee_id).
 
 Most of these were created in the Supabase Dashboard before migrations were used, so the SQL for them isn't in the repo. Don't infer a table's columns or RLS policies from `supabase/migrations/`. Read how the code uses the table, or ask Mihir to run `supabase db pull` so the schema can be committed.
 
@@ -47,6 +48,7 @@ Most of these were created in the Supabase Dashboard before migrations were used
 
 ## Supabase rules
 
+- **Social reads:** following is open. A follower can SELECT (never write) the followee's `matches` and every `*_details` / `golf_holes` / `gym_sets` row, through `*_select_followers` policies. Any new per-activity table needs the same follower select policy, or friends' cards will silently miss it. Look people up with `rpc("search_people")` / `rpc("people_by_ids")`; don't add a broad select policy to `profiles`.
 - **RLS is on.** Every new table needs policies for every operation the app performs (select, insert, update, delete). Team data is gated by team membership, not by row owner. `matches` inserts require `auth.uid() = user_id`, so a client can only write its own personal rows. Anything that writes for other users needs an Edge Function.
 - **Migrations:** new files go in `supabase/migrations/` as `YYYYMMDDHHMMSS_description.sql`, and should be idempotent where practical (`if not exists`). **Claude writes migrations; Mihir reviews and runs `supabase db push` himself.** Don't run it unprompted.
 - **Edge Functions:** follow the `parse-scorecard` pattern. That means a CORS preflight, an auth check on the caller's JWT, and extracting JSON from between the first `{` and the last `}` of the model's reply. The model is allowed to reason before the JSON but must end on it; banning reasoning made extraction worse. Deploy with `supabase functions deploy <name>`, and only once Mihir has said so.
