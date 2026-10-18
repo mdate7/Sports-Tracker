@@ -91,6 +91,11 @@
         <h1 class="title" id="view-title">Your feed</h1>
     </header>
 
+<div class="segmented" id="feed-scope" role="group" aria-label="Whose activities">
+  <button class="chip" data-feed-scope="mine" aria-pressed="true">You</button>
+  <button class="chip" data-feed-scope="following" aria-pressed="false">Following</button>
+</div>
+
 <div class="rail" id="sport-rail">
   <button class="chip" data-sport-filter="all" aria-pressed="true">All</button>
   <button class="chip" data-sport-filter="football" data-sport="football" aria-pressed="false">Football</button>
@@ -124,6 +129,7 @@
 <script src="golf.js"></script>
 <script src="gym.js"></script>
 <script src="teams.js"></script>
+<script src="social.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

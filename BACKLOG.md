@@ -38,10 +38,8 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Social
 
-- [ ] Feed (previously flagged as high priority)
 - [ ] Sport grouping
 - [ ] Likes
-- [ ] Follow / following
 
 ## Stats and insights
 
@@ -63,6 +61,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Done recently
 
+- [x] Social feed with open following: You / Following switch on the feed (respects the sport filter), read-only cards for people you follow, People screen (search by name, teammate suggestions, following/followers lists), counts on the Me screen. `follows` table plus follower read-only RLS; name search via `search_people()` / `people_by_ids()` so `profiles` stays private.
 - [x] Gym: optional session names ("Push day"); unnamed sessions are titled by muscle groups. Repeat list shows the latest of each named session.
 - [x] Gym: repeat a recent session (from the setup screen or a session's detail page) and edit it; sets measured by reps or by time/distance, mixed freely in one session (covers "mixed sessions"); Cardio session type; + Add set copies the set above.
 - [x] Team view redesign: next match pinned with team sheet/result buttons, season chips (Aug–Jul), season summary with W–D–L, goals, GD and a last-5 form strip, tappable results list, per-season player table (apps, goals, assists, MOTM). Members tucked into a collapsible section. (Built without access to the Claude Design files.)

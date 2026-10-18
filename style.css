@@ -370,3 +370,56 @@
   color: var(--text);
   font: var(--t-body);
 }
+
+/* --- Social: feed scope, friend cards, people --- */
+
+/* You | Following: two chips that read as one control */
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  margin-bottom: var(--s-3);
+  border-radius: var(--r-chip);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.segmented .chip { border: 0; min-height: 32px; padding: 6px 16px; background: transparent; color: var(--muted); }
+.segmented .chip[aria-pressed="true"] { background: var(--text); color: var(--bg); }
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--raised);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font: 700 .6875rem var(--font-data);
+  letter-spacing: .04em;
+}
+
+.friend-card__who { display: flex; align-items: center; gap: var(--s-2); }
+.friend-card__who .label { margin-left: auto; }
+.friend-card__name { font: var(--t-value); }
+.friend-card__notes { margin: var(--s-3) 0 0; font: var(--t-body); color: var(--muted); font-style: italic; }
+.friend-card .btn { width: auto; }
+
+.person-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) 0;
+  border-top: 1px solid var(--line);
+}
+.person-row:first-child { border-top: 0; padding-top: 0; }
+.person-row:last-child { padding-bottom: 0; }
+.person-row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.person-row__name { font: var(--t-value); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person-row .chip[aria-pressed="true"] { background: var(--raised); color: var(--text); border-color: var(--line-strong); }
+.person-row .chip[aria-pressed="false"] { background: var(--sport); color: var(--on-accent); border-color: transparent; }
+
+.privacy-note { margin: var(--s-3) 0; font: var(--t-body); color: var(--muted); }
+.field input[type="search"] { -webkit-appearance: none; appearance: none; }
+.field input[type="search"]:focus { outline: none; }

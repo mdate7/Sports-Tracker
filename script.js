@@ -204,6 +204,7 @@ document.addEventListener("visibilitychange", async () => {
 function openScreen(title) {
   document.querySelector(".app-header").style.display = "none";
   sportRail.style.display = "none";
+  feedScopeEl.style.display = "none";
   matchList.style.display = "none";
   tabBar.style.display = "none";
   document.getElementById("screen-header").style.display = "flex";
@@ -218,7 +219,10 @@ function closeScreen() {
   tabBar.style.display = "";
   document.getElementById("screen-header").style.display = "none";
   form.style.display = "none";
-  if (currentMode === "feed") sportRail.style.display = "flex";
+  if (currentMode === "feed") {
+    sportRail.style.display = "flex";
+    feedScopeEl.style.display = "";
+  }
   releaseWakeLock();
 }
 
@@ -520,6 +524,7 @@ function renderProfileScreen() {
         <button type="button" class="chip" data-theme-option="system" aria-pressed="${themePref === "system"}">Match phone</button>
       </div>
     </div>
+    ${peopleSummaryCardHtml()}
   `;
 
   // Takes effect immediately and is saved per device, so it sits outside the
@@ -799,11 +804,19 @@ function renderView() {
     return;
   }
   if (currentMode === "me") {
+    if (meSubView === "people") { renderPeopleScreen(); return; }
     viewLabel.textContent = "Me";
     viewTitle.textContent = "Your sports";
     renderProfileScreen();
     return;
 }
+
+  if (feedScope === "following") {
+    viewLabel.textContent = currentView === "all" ? "All sports" : sportNames[currentView];
+    viewTitle.textContent = "Following";
+    renderFollowingFeed();
+    return;
+  }
 
   // currentMode === "feed"
   if (currentView === "all") {
@@ -824,6 +837,7 @@ function setMode(mode) {
     else link.removeAttribute("aria-current");
   });
   sportRail.style.display = mode === "feed" ? "flex" : "none";
+  feedScopeEl.style.display = mode === "feed" ? "" : "none";
   renderView();
 }
 
@@ -910,12 +924,20 @@ async function deleteMatch(id) {
 }
 
 const sportRail = document.getElementById("sport-rail");
+const feedScopeEl = document.getElementById("feed-scope");
+feedScopeEl.addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-feed-scope]");
+  if (chip) setFeedScope(chip.dataset.feedScope);
+});
 
 tabBar.addEventListener("click", (event) => {
   const link = event.target.closest("a[data-mode]");
   if (!link) return;
   event.preventDefault();
   if (editingId !== null) return;
+  // A tab tap always lands on that tab's main screen; "Find people" buttons
+  // set meSubView themselves before switching.
+  meSubView = null;
   setMode(link.dataset.mode);
 });
 
@@ -934,6 +956,9 @@ if (isOpen) {
 }
 
   if (currentMode !== "feed") setMode("feed");
+  // Logging something is about your own feed: show it, so the saved activity
+  // appears where you'd expect instead of behind the Following view.
+  if (feedScope !== "mine") setFeedScope("mine");
 
   if (currentView === "all") {
     buildSportPicker();
@@ -1037,6 +1062,7 @@ async function showApp() {
   matches = await loadMatchesFromSupabase();
   userTeams = await loadUserTeams();
   pendingSelections = await loadPendingSelectionsToLog();
+  await loadFollows();
   setMode("feed");
 }
 
