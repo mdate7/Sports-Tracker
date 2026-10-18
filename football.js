@@ -64,6 +64,11 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
       </div>
     </div>
 
+    <p class="label" style="margin-top:16px;">Your rating <span style="text-transform:none;letter-spacing:0;">(optional, out of 10)</span></p>
+    <div class="chips rating-chips" id="rating-chips" role="group" aria-label="Your rating out of 10">
+      ${Array.from({ length: 10 }, (_, i) => i + 1).map(n => `<button type="button" class="chip" data-rating="${n}" aria-pressed="${Number(existingMatch?.matchRating ?? draft?.rating) === n}">${n}</button>`).join("")}
+    </div>
+
     <div class="field" style="margin-top:16px;">
       <label class="label" for="date">Date</label>
       <input type="date" id="date" value="${existingMatch ? existingMatch.date : (draft?.date || (prefillFixture ? prefillFixture.date : todayISODate()))}" required>
@@ -123,13 +128,14 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
     goals: Number(document.getElementById("your-goals-output").textContent),
     assists: Number(document.getElementById("your-assists-output").textContent),
     position: document.querySelector('#position-chips .chip[aria-pressed="true"]')?.dataset.position || null,
+    match_rating: Number(document.querySelector('#rating-chips .chip[aria-pressed="true"]')?.dataset.rating) || null,
     fixture_id: document.getElementById("fixture-select")?.value || null
   };
 
   if (existingMatch) {
     const { error: matchError } = await supabaseClient
       .from("matches")
-      .update({ date: payload.date, notes: payload.notes })
+      .update({ date: payload.date, notes: payload.notes, match_rating: payload.match_rating })
       .eq("id", existingMatch.id);
     if (matchError) {
       console.error("Failed to update match:", matchError);
@@ -162,10 +168,14 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
   } else {
     const { data: matchRow, error: matchError } = await supabaseClient
       .from("matches")
-      .insert({ user_id: userId, sport: "football", date: payload.date, notes: payload.notes })
+      .insert({ user_id: userId, sport: "football", date: payload.date, notes: payload.notes, match_rating: payload.match_rating })
       .select()
       .single();
-    if (matchError) { console.error("Failed to save match:", matchError); return; }
+    if (matchError) {
+      console.error("Failed to save match:", matchError);
+      alert("Something went wrong saving this match. Your entries are still here; try again.");
+      return;
+    }
 
     const { error: detailError } = await supabaseClient
       .from("football_details")
@@ -174,7 +184,14 @@ async function buildFootballForm(existingMatch = null, prefillFixture = null) {
         goals_against: payload.goals_against, goals: payload.goals, assists: payload.assists,
         position: payload.position, fixture_id: payload.fixture_id
       });
-    if (detailError) console.error("Failed to save football details:", detailError);
+    // A matches row without its football_details is the orphan shape that
+    // used to break the feed: undo it, and keep the form (and draft) as typed.
+    if (detailError) {
+      console.error("Failed to save football details:", detailError);
+      await supabaseClient.from("matches").delete().eq("id", matchRow.id);
+      alert("Something went wrong saving this match, so nothing was saved. Your entries are still here; try again.");
+      return;
+    }
     clearFootballDraft();
 
     if (activeSelectionId) {
@@ -233,6 +250,15 @@ wireStepper("goals-against-minus", "goals-against-plus", "goals-against-output",
 wireStepper("your-goals-minus", "your-goals-plus", "your-goals-output", saveFootballDraft);
 wireStepper("your-assists-minus", "your-assists-plus", "your-assists-output", saveFootballDraft);
 
+document.getElementById("rating-chips").addEventListener("click", (event) => {
+  const chip = event.target.closest(".chip");
+  if (!chip) return;
+  const wasOn = chip.getAttribute("aria-pressed") === "true";
+  document.querySelectorAll("#rating-chips .chip").forEach(c => c.setAttribute("aria-pressed", "false"));
+  if (!wasOn) chip.setAttribute("aria-pressed", "true"); // tapping the chosen one again clears it
+  saveFootballDraft();
+});
+
 document.getElementById("position-chips").addEventListener("click", (event) => {
   const chip = event.target.closest(".chip");
   if (!chip) return;
@@ -280,6 +306,7 @@ function saveFootballDraft() {
     yourGoals: document.getElementById("your-goals-output")?.textContent,
     yourAssists: document.getElementById("your-assists-output")?.textContent,
     position: document.querySelector('#position-chips .chip[aria-pressed="true"]')?.dataset.position,
+    rating: document.querySelector('#rating-chips .chip[aria-pressed="true"]')?.dataset.rating,
     fixtureId: document.getElementById("fixture-select")?.value
   };
   localStorage.setItem("draftFootballMatch", JSON.stringify(draft));
