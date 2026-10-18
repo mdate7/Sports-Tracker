@@ -61,6 +61,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Done recently
 
+- [x] Display names required: asked at onboarding, and once for existing accounts without one (pre-filled from their team-sheet name); can't be blanked on the Me screen. Until set, search falls back to the team-sheet name. One-off backfill: `supabase/scripts/2026-10-18_backfill_display_names.sql`.
 - [x] Social feed with open following: You / Following switch on the feed (respects the sport filter), read-only cards for people you follow, People screen (search by name, teammate suggestions, following/followers lists), counts on the Me screen. `follows` table plus follower read-only RLS; name search via `search_people()` / `people_by_ids()` so `profiles` stays private.
 - [x] Gym: optional session names ("Push day"); unnamed sessions are titled by muscle groups. Repeat list shows the latest of each named session.
 - [x] Gym: repeat a recent session (from the setup screen or a session's detail page) and edit it; sets measured by reps or by time/distance, mixed freely in one session (covers "mixed sessions"); Cardio session type; + Add set copies the set above.

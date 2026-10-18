@@ -502,7 +502,7 @@ function renderProfileScreen() {
   matchList.innerHTML = `
   <div class="field">
   <label class="label" for="me-display-name">Display name</label>
-  <input type="text" id="me-display-name" value="${escapeHtml(userProfile?.display_name)}">
+  <input type="text" id="me-display-name" maxlength="40" autocomplete="name" value="${escapeHtml(userProfile?.display_name)}">
     </div>
     <div class="card">
       <p class="label">Sports you track</p>
@@ -549,10 +549,17 @@ function renderProfileScreen() {
     const selected = Array.from(document.querySelectorAll('#me-sports .chip[aria-pressed="true"]'))
       .map(chip => chip.dataset.sportOption);
     const statusEl = document.getElementById("me-status");
+    const name = document.getElementById("me-display-name").value.trim();
+    // Search and the Following feed rely on a name, so it can be changed but not removed.
+    if (!name) {
+      statusEl.textContent = "Your name can't be empty. It's how people find you.";
+      return;
+    }
 
     const { data, error } = await supabaseClient
       .from("profiles")
-      .update({ sports_tracked: selected, display_name: document.getElementById("me-display-name").value.trim() || null })      .eq("id", userProfile.id)
+      .update({ sports_tracked: selected, display_name: name })
+      .eq("id", userProfile.id)
       .select()
       .single();
 
@@ -1070,6 +1077,8 @@ async function handleSignedIn(userId) {
   userProfile = await loadProfile(userId);
   if (!userProfile) {
     showOnboarding();
+  } else if (!hasDisplayName(userProfile)) {
+    showNamePrompt();
   } else {
     await showApp();
   }

@@ -27,6 +27,7 @@ A personal multi-sport tracker (football, golf, gym, cricket, plus teams), live 
 | `style.css` | Small app-specific overrides. |
 | `supabase/functions/parse-scorecard` | Reads a golf scorecard photo with the vision model and returns per-hole JSON. |
 | `supabase/functions/parse-team-chat` | Text-only sibling. Takes one WhatsApp chat chunk and returns a fixture result as JSON. |
+| `supabase/scripts/` | One-off SQL to run by hand in the Dashboard SQL Editor (e.g. data backfills). Never applied by `db push`. |
 | `supabase/migrations/` | Only the Sept 2026 team/fixture migrations. **This is not the full schema.** |
 
 ## Data model (tables the client touches)
@@ -50,7 +51,7 @@ Most of these were created in the Supabase Dashboard before migrations were used
 
 - **Social reads:** following is open. A follower can SELECT (never write) the followee's `matches` and every `*_details` / `golf_holes` / `gym_sets` row, through `*_select_followers` policies. Any new per-activity table needs the same follower select policy, or friends' cards will silently miss it. Look people up with `rpc("search_people")` / `rpc("people_by_ids")`; don't add a broad select policy to `profiles`.
 - **RLS is on.** Every new table needs policies for every operation the app performs (select, insert, update, delete). Team data is gated by team membership, not by row owner. `matches` inserts require `auth.uid() = user_id`, so a client can only write its own personal rows. Anything that writes for other users needs an Edge Function.
-- **Migrations:** new files go in `supabase/migrations/` as `YYYYMMDDHHMMSS_description.sql`, and should be idempotent where practical (`if not exists`). **Claude writes migrations; Mihir reviews and runs `supabase db push` himself.** Don't run it unprompted.
+- **Migrations:** new files go in `supabase/migrations/` as `YYYYMMDDHHMMSS_description.sql`, timestamped **after every migration already on `main` and in any open PR** (the CLI refuses an older-dated one once a newer one is live, unless run with `--include-all`), and should be idempotent where practical (`if not exists`). **Claude writes migrations; Mihir reviews and runs `supabase db push` himself.** Don't run it unprompted.
 - **Edge Functions:** follow the `parse-scorecard` pattern. That means a CORS preflight, an auth check on the caller's JWT, and extracting JSON from between the first `{` and the last `}` of the model's reply. The model is allowed to reason before the JSON but must end on it; banning reasoning made extraction worse. Deploy with `supabase functions deploy <name>`, and only once Mihir has said so.
 - **Never commit secrets.** The publishable key in `script.js` is meant to be public. Service-role keys, the Anthropic key and the Resend key are not.
 
