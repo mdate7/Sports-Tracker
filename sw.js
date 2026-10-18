@@ -1,4 +1,4 @@
-const CACHE_NAME = "clubhouse-v7";
+const CACHE_NAME = "clubhouse-v8";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -44,8 +44,13 @@ self.addEventListener("fetch", (event) => {
   // are covered automatically.
   const isAppCode = /\.(js|css)(\?|$)/.test(url) && url.startsWith(self.location.origin);
 
+  // cache: "no-cache" makes the browser check with the server instead of
+  // reusing its own HTTP cache. Without it, GitHub Pages' 10-minute cache
+  // headers could hand back an old style.css alongside a new script after a
+  // deploy, so new screens rendered unstyled. An unchanged file costs only a
+  // small 304 response.
   if (isAppCode || url.includes("index.html") || event.request.mode === "navigate") {
-    event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+    event.respondWith(fetch(event.request, { cache: "no-cache" }).catch(() => caches.match(event.request)));
     return;
   }
 

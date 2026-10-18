@@ -98,6 +98,7 @@ if (row.sport === "gym" && row.gym_details) {
     ...base,
     type: d.type,
     typeLabel: gymTypeLabel(d.type),
+    sessionName: d.name || "",
     sets: (row.gym_sets || [])
       .sort((a, b) => a.set_number - b.set_number)
       .map(s => ({
@@ -603,7 +604,7 @@ function renderMatch(match) {
       : `<span class="delta num">${sets.length} set${sets.length === 1 ? "" : "s"}</span>`;
   }
 
-  const title = match.opponent || match.courseName || "";
+  const title = match.opponent || match.courseName || (match.sport === "gym" ? gymSessionTitle(match) : "");
 
   card.innerHTML = `
     <div class="card-head">
@@ -669,7 +670,7 @@ function renderInProgressCards() {
       <div class="card" data-sport="gym" data-resume="gym" style="cursor:pointer;">
         <div class="card-head">
           <div>
-            <p class="eyebrow">Gym · ${escapeHtml(gymTypeLabel(session.type))}</p>
+            <p class="eyebrow">Gym · ${escapeHtml(gymSessionTitle(session))}</p>
             <p class="card-meta">${session.sets.length} set${session.sets.length === 1 ? "" : "s"} logged</p>
           </div>
           <span class="chip" aria-pressed="true">Resume</span>
@@ -738,7 +739,7 @@ function renderMatchDetailScreen() {
 
   const golfBreakdown = match.sport === "golf" ? renderGolfDetailHtml(match) : "";
   const gymBreakdown = match.sport === "gym" ? renderGymDetailHtml(match) : "";
-  const title = match.opponent || match.courseName || "";
+  const title = match.opponent || match.courseName || (match.sport === "gym" ? gymSessionTitle(match) : "");
 const editButton = match.sport === "golf" || match.sport === "gym"
   ? `<div style="display:flex;gap:8px;margin-top:12px;">
       <button type="button" id="detail-edit-btn" class="btn btn--ghost btn--sm" style="flex:1;">Edit ${match.sport === "golf" ? "round" : "session"}</button>
