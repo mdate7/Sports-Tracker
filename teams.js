@@ -1232,11 +1232,11 @@ async function publishResult() {
   if (resultDraft.addToMyRecord) {
     const mine = squad.find(p => p.userId === userId && p.inSquad);
     if (mine) {
-      const { data: existingLink } = await supabaseClient
-        .from("football_details")
-        .select("match_id")
-        .eq("fixture_id", fixture.id)
-        .maybeSingle();
+      // Check MY records only. This used to query football_details by
+      // fixture_id, which (since followers can read each other's details)
+      // could find a followed teammate's record and wrongly skip creating
+      // mine. `matches` only ever holds the signed-in user's own rows.
+      const existingLink = matches.some(m => m.sport === "football" && m.fixtureId === fixture.id);
 
       if (!existingLink) {
         const { data: matchRow, error: matchError } = await supabaseClient
@@ -1259,7 +1259,12 @@ async function publishResult() {
               assists: mine.assists || 0,
               fixture_id: fixture.id
             });
-          if (detailError) console.error("Failed to save personal match details:", detailError);
+          if (detailError) {
+            // Don't leave a matches row with no details behind.
+            console.error("Failed to save personal match details:", detailError);
+            await supabaseClient.from("matches").delete().eq("id", matchRow.id);
+            alert("The result was published, but adding it to your personal record failed. Re-open the result and publish again to retry.");
+          }
         }
       }
     }

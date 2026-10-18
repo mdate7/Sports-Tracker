@@ -488,3 +488,6 @@
 .ranked__track { height: 10px; }
 .ranked__bar { display: block; height: 100%; border-radius: 0 4px 4px 0; }
 .ranked__value { font: var(--t-body); text-align: right; color: var(--muted); }
+
+/* Football rating: ten compact chips that fit on two rows at phone width */
+.rating-chips .chip { min-width: 44px; justify-content: center; padding-inline: 0; }
