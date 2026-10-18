@@ -27,6 +27,16 @@
   --gym:           oklch(0.70 0.17 330);   /* magenta        */
 
   --sport:         var(--football);        /* default binding, see [data-sport] */
+
+  /* ---- chart series ------------------------------------------------------ *
+   * Same hues as the sport accents, but all at one lightness so no sport
+   * shouts in a stacked chart, and checked to stay distinct for colour-blind
+   * readers (dataviz validator: lightness band, chroma, CVD ΔE, contrast).
+   * Use these for chart marks only; text stays in --text / --muted.        */
+  --chart-football: #70a600;
+  --chart-golf:     #00a8b8;
+  --chart-cricket:  #d87400;
+  --chart-gym:      #ca66c3;
   --negative:      oklch(0.62 0.17  28);   /* loss, over par, regression */
 
   /* ---- type -------------------------------------------------------------- */
@@ -86,6 +96,11 @@
   --golf:        oklch(0.63 0.13 205);
   --gym:         oklch(0.58 0.17 330);
   --negative:    oklch(0.55 0.17  28);
+  /* chart series, re-stepped and re-validated against the light surface */
+  --chart-football: #619600;
+  --chart-golf:     #0098a8;
+  --chart-cricket:  #c76500;
+  --chart-gym:      #b957b3;
 }
 [data-theme="light"] { color-scheme: light; }
 [data-theme="dark"]  { color-scheme: dark; }
