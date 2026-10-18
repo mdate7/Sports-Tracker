@@ -792,9 +792,7 @@ function renderView() {
   form.style.display = "none";
 
   if (currentMode === "insights") {
-    viewLabel.textContent = "Insights";
-    viewTitle.textContent = "Coming soon";
-    matchList.innerHTML = `<p class="empty-state">Stats and graphs are coming in a future stage.</p>`;
+    renderInsights();
     return;
   }
   if (currentMode === "teams") {
