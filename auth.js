@@ -38,11 +38,68 @@ async function loadProfile(userId) {
 }
 
 
-function showOnboarding() {
+// The name a team already uses for this person (from a team sheet or the
+// WhatsApp backfill), used to pre-fill the name question. "" if none.
+async function suggestNameFromTeams() {
+  const userId = await ensureSignedIn();
+  if (!userId) return "";
+  const { data, error } = await supabaseClient
+    .from("players")
+    .select("display_name")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  if (error) {
+    console.error("Couldn't look up a team name:", error);
+    return "";
+  }
+  return (data && data[0]?.display_name?.trim()) || "";
+}
+
+const hasDisplayName = (profile) => !!String(profile?.display_name || "").trim();
+
+async function showOnboarding() {
   document.getElementById("auth-screen").style.display = "none";
   document.querySelector(".app").style.display = "none";
   document.getElementById("onboarding-screen").style.display = "flex";
+  const input = document.getElementById("onboard-name");
+  if (!input.value) input.value = await suggestNameFromTeams();
 }
+
+// For accounts made before onboarding asked for a name. Shown once, on the
+// next sign-in, because search and the Following feed are useless without it.
+async function showNamePrompt() {
+  document.getElementById("auth-screen").style.display = "none";
+  document.getElementById("onboarding-screen").style.display = "none";
+  document.querySelector(".app").style.display = "none";
+  document.getElementById("name-screen").style.display = "flex";
+  const input = document.getElementById("name-screen-input");
+  if (!input.value) input.value = await suggestNameFromTeams();
+  input.focus();
+}
+
+document.getElementById("name-screen-btn").addEventListener("click", async () => {
+  const name = document.getElementById("name-screen-input").value.trim();
+  const statusEl = document.getElementById("name-screen-status");
+  if (!name) {
+    statusEl.textContent = "Add a name to carry on.";
+    return;
+  }
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .update({ display_name: name })
+    .eq("id", userProfile.id)
+    .select()
+    .single();
+  if (error) {
+    console.error("Failed to save name:", error);
+    statusEl.textContent = "Something went wrong. Try again.";
+    return;
+  }
+  userProfile = data;
+  document.getElementById("name-screen").style.display = "none";
+  await showApp();
+});
 
 document.getElementById("onboard-sports").addEventListener("click", (event) => {
   const chip = event.target.closest(".chip");
@@ -55,12 +112,19 @@ document.getElementById("onboard-continue-btn").addEventListener("click", async 
   const selected = Array.from(document.querySelectorAll('#onboard-sports .chip[aria-pressed="true"]'))
     .map(chip => chip.dataset.sportOption);
 
+  const name = document.getElementById("onboard-name").value.trim();
+  if (!name) {
+    document.getElementById("onboard-status").textContent = "Add your name so teammates can find you.";
+    document.getElementById("onboard-name").focus();
+    return;
+  }
+
   const userId = await ensureSignedIn();
   if (!userId) return;
 
   const { data, error } = await supabaseClient
     .from("profiles")
-    .insert({ id: userId, sports_tracked: selected })
+    .insert({ id: userId, display_name: name, sports_tracked: selected })
     .select()
     .single();
 
@@ -111,5 +175,6 @@ document.getElementById("auth-verify-btn").addEventListener("click", async () =>
 function showAuthScreen() {
   document.getElementById("auth-screen").style.display = "flex";
   document.getElementById("onboarding-screen").style.display = "none";
+  document.getElementById("name-screen").style.display = "none";
   document.querySelector(".app").style.display = "none";
 }
