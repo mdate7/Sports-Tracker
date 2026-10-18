@@ -331,3 +331,42 @@
 .team-members summary::after { content: " ▾"; }
 .team-members[open] summary { margin-bottom: var(--s-2); }
 .team-members .fixture-row { font: var(--t-body); justify-content: space-between; }
+
+/* --- Gym: repeat a session, per-set measure toggle --- */
+
+.chip--sm { padding: 5px 10px; min-height: 30px; font-size: .6875rem; }
+
+.repeat-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: var(--s-3) 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.repeat-row:first-child { border-top: 0; }
+.repeat-row:active { background: var(--raised); }
+.repeat-row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.repeat-row__title { font: var(--t-value); }
+.repeat-row__meta {
+  font: var(--t-body);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repeat-banner {
+  margin: var(--s-2) 0 0;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-field);
+  background: color-mix(in oklab, var(--sport) 14%, transparent);
+  color: var(--text);
+  font: var(--t-body);
+}

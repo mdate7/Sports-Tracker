@@ -97,9 +97,17 @@ if (row.sport === "gym" && row.gym_details) {
   return {
     ...base,
     type: d.type,
+    typeLabel: gymTypeLabel(d.type),
     sets: (row.gym_sets || [])
       .sort((a, b) => a.set_number - b.set_number)
-      .map(s => ({ exercise: s.exercise, muscleGroup: s.muscle_group, weight: s.weight, reps: s.reps, rounds: s.rounds }))
+      .map(s => ({
+        exercise: s.exercise, muscleGroup: s.muscle_group,
+        // Rows from before timed sets existed have no measure column value.
+        measure: s.measure || "reps",
+        weight: s.weight ?? "", reps: s.reps ?? "", rounds: s.rounds ?? "",
+        duration: s.duration_seconds ?? "",
+        distance: s.distance_m === null || s.distance_m === undefined ? "" : s.distance_m / 1000
+      }))
   };
 }
 
@@ -144,7 +152,7 @@ const sportFields = {
     { key: "playedWith", label: "Played With", type: "text", summary: true, autocomplete: true }
   ],
   gym: [
-    { key: "type", label: "Session Type", type: "text", summary: true },
+    { key: "typeLabel", label: "Session Type", type: "text", summary: true },
   ]
 };
 
@@ -371,18 +379,19 @@ function renderGymDetailHtml(match) {
   const groupsHtml = Object.entries(groups).map(([exercise, sets]) => `
     <div style="margin-top:14px;">
       <p class="stat-value" style="font-size:0.95rem;">${escapeHtml(exercise)}</p>
-      ${sets.map(s => `
-        <p class="label" style="margin-top:4px;">
-          ${s.weight || 0}kg × ${s.reps || 0} reps${s.rounds && s.rounds > 1 ? ` × ${s.rounds} rounds` : ""}
-        </p>
-      `).join("")}
+      ${sets.map(s => `<p class="label" style="margin-top:4px;">${describeGymSet(s)}</p>`).join("")}
     </div>
   `).join("");
+
+  const totalSeconds = match.sets.reduce((sum, s) => sum + (s.measure === "time" ? Number(s.duration) || 0 : 0), 0);
+  const totalKm = match.sets.reduce((sum, s) => sum + (s.measure === "time" ? Number(s.distance) || 0 : 0), 0);
 
   return `
     <div class="stats" style="margin-top:12px;">
       <div><span class="stat-value num">${match.sets.length}</span><p class="label">Sets</p></div>
       <div><span class="stat-value num">${distinctExercises}</span><p class="label">Exercises</p></div>
+      ${totalSeconds ? `<div><span class="stat-value num">${formatDuration(totalSeconds)}</span><p class="label">Time</p></div>` : ""}
+      ${totalKm ? `<div><span class="stat-value num">${totalKm.toLocaleString("en-GB", { maximumFractionDigits: 2 })}</span><p class="label">km</p></div>` : ""}
     </div>
       ${focusAreas.length ? `<p class="label" style="margin-top:10px;">Focus areas</p><p class="stat-value" style="font-size:0.95rem;margin-top:2px;">${escapeHtml(focusAreas.join(", "))}</p>` : ""}
     ${groupsHtml}
@@ -585,7 +594,13 @@ function renderMatch(match) {
     const cls = match.strokes > match.par ? "delta--neg" : "";
     hero = `<span class="delta num ${cls}">${diff}</span>`;
   } else if (match.sport === "gym") {
-    hero = `<span class="delta num">${(match.sets || []).length} sets</span>`;
+    // A session that's all time/distance (a run, a row) leads with its time.
+    const sets = match.sets || [];
+    const allTimed = sets.length && sets.every(s => s.measure === "time");
+    const seconds = sets.reduce((sum, s) => sum + (Number(s.duration) || 0), 0);
+    hero = allTimed && seconds
+      ? `<span class="delta num">${formatDuration(seconds)}</span>`
+      : `<span class="delta num">${sets.length} set${sets.length === 1 ? "" : "s"}</span>`;
   }
 
   const title = match.opponent || match.courseName || "";
@@ -654,7 +669,7 @@ function renderInProgressCards() {
       <div class="card" data-sport="gym" data-resume="gym" style="cursor:pointer;">
         <div class="card-head">
           <div>
-            <p class="eyebrow">Gym · ${session.type || "In progress"}</p>
+            <p class="eyebrow">Gym · ${escapeHtml(gymTypeLabel(session.type))}</p>
             <p class="card-meta">${session.sets.length} set${session.sets.length === 1 ? "" : "s"} logged</p>
           </div>
           <span class="chip" aria-pressed="true">Resume</span>
@@ -725,7 +740,10 @@ function renderMatchDetailScreen() {
   const gymBreakdown = match.sport === "gym" ? renderGymDetailHtml(match) : "";
   const title = match.opponent || match.courseName || "";
 const editButton = match.sport === "golf" || match.sport === "gym"
-  ? `<button type="button" id="detail-edit-btn" class="btn btn--ghost btn--sm" style="margin-top:12px;">Edit ${match.sport === "golf" ? "round" : "session"}</button>`
+  ? `<div style="display:flex;gap:8px;margin-top:12px;">
+      <button type="button" id="detail-edit-btn" class="btn btn--ghost btn--sm" style="flex:1;">Edit ${match.sport === "golf" ? "round" : "session"}</button>
+      ${match.sport === "gym" && (match.sets || []).length ? `<button type="button" id="detail-repeat-btn" class="btn btn--sm" style="flex:1;">Repeat session</button>` : ""}
+    </div>`
   : "";
 
   matchList.innerHTML = `
@@ -750,6 +768,11 @@ const editButton = match.sport === "golf" || match.sport === "gym"
   // exist — calling .addEventListener on the null threw a TypeError and
   // killed the rest of this render. Same unguarded-access class of bug as
   // the match.sets one from earlier.
+  document.getElementById("detail-repeat-btn")?.addEventListener("click", () => {
+    currentDetailMatchId = null;
+    repeatGymSession(match);
+  });
+
   document.getElementById("detail-edit-btn")?.addEventListener("click", () => {
     if (match.sport === "golf") {
       editGolfRound(match);

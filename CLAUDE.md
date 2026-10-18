@@ -20,7 +20,7 @@ A personal multi-sport tracker (football, golf, gym, cricket, plus teams), live 
 | `auth.js` | Loads first. The Supabase client (`supabaseClient`), the shared `escapeHtml()` helper, `ensureSignedIn`, `loadProfile`, onboarding (sport picker). |
 | `football.js` | Personal football match form, plus drafts saved to localStorage. |
 | `golf.js` | Golf setup, hole-by-hole entry, scorecard photo upload (`handleScorecardUpload` → `parse-scorecard`), scorecard review, `finishGolfRound`. |
-| `gym.js` | Gym session and set entry, `finishGymSession`. |
+| `gym.js` | Gym session and set entry (each set is `measure: "reps"` or `"time"`), repeat-a-session, `finishGymSession`. |
 | `teams.js` | Teams, invites, fixtures, team sheets, ad-hoc players (`ensurePlayersForTeam`), and the three-step result entry flow (`renderResultScoreStep` → `renderResultEventsStep` → `renderResultPublishStep` → `publishResult`). |
 | `Clubhouse-tokens.css` | The "Floodlight" design system: CSS custom-property tokens, dark-first, with light-mode tokens present. |
 | `style.css` | Small app-specific overrides. |
