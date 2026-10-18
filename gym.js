@@ -1,33 +1,68 @@
-let gymSession = null; // { type, sets: [{ exercise, muscleGroup, weight, reps, rounds }, ...] }
+let gymSession = null; // { type, name, sets: [set, ...], editingMatchId?, repeatedFrom? }
+// set = { exercise, muscleGroup, measure: "reps" | "time", weight, reps, rounds,
+//         duration (seconds), distance (km) }. Unused fields stay "".
 
-function buildGymSetup() {
-  form.innerHTML = `
-    <p class="label">Type</p>
-    <div class="chips" id="gym-type-rail" style="flex-wrap:wrap;">
-      <button type="button" class="chip" data-gym-type="strength" data-sport="gym" aria-pressed="false">Strength</button>
-      <button type="button" class="chip" data-gym-type="hiit" data-sport="gym" aria-pressed="false">HIIT</button>
-      <button type="button" class="chip" data-gym-type="class" data-sport="gym" aria-pressed="false">Class</button>
-    </div>
-    <button type="button" id="gym-start-btn" class="btn" style="margin-top:16px;">Start Session</button>
-  `;
+const GYM_TYPES = [
+  { id: "strength", label: "Strength" },
+  { id: "hiit", label: "HIIT" },
+  { id: "class", label: "Class" },
+  { id: "cardio", label: "Cardio" }
+];
+const gymTypeLabel = (id) => GYM_TYPES.find(t => t.id === id)?.label || id || "Session";
 
-  document.getElementById("gym-type-rail").addEventListener("click", (event) => {
-    const chip = event.target.closest(".chip");
-    if (!chip) return;
-    document.querySelectorAll("#gym-type-rail .chip").forEach(c => c.setAttribute("aria-pressed", "false"));
-    chip.setAttribute("aria-pressed", "true");
+function blankGymSet(measure = "reps") {
+  return { exercise: "", muscleGroup: "", measure, weight: "", reps: "", rounds: "", duration: "", distance: "" };
+}
+
+// "25" → 25 min, "25:30" → 25m30s, "1:05:00" → 1h5m. Returns seconds, or "" if unreadable.
+function parseDuration(text) {
+  const t = String(text || "").trim();
+  if (!t) return "";
+  const parts = t.split(":").map(Number);
+  if (parts.some(n => !Number.isFinite(n) || n < 0)) return "";
+  if (parts.length === 1) return Math.round(parts[0] * 60);
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  return "";
+}
+
+function formatDuration(seconds) {
+  if (seconds === "" || seconds === null || seconds === undefined) return "";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const sec = String(seconds % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
+// One line describing a set, used on the feed, detail screen and repeat list.
+function describeGymSet(s) {
+  if (s.measure === "time") {
+    const bits = [];
+    if (s.duration) bits.push(formatDuration(s.duration));
+    if (s.distance) bits.push(`${Number(s.distance).toLocaleString("en-GB", { maximumFractionDigits: 2 })} km`);
+    return bits.join(" · ") || "Time / distance";
+  }
+  return `${s.weight || 0}kg × ${s.reps || 0} reps${s.rounds && s.rounds > 1 ? ` × ${s.rounds} rounds` : ""}`;
+}
+
+// Muscle groups in the order they were first trained, ignoring case and blanks.
+function gymMuscleGroups(sets) {
+  const seen = new Map();
+  (sets || []).forEach(s => {
+    const g = String(s.muscleGroup || "").trim();
+    if (g && !seen.has(g.toLowerCase())) seen.set(g.toLowerCase(), g[0].toUpperCase() + g.slice(1));
   });
+  return [...seen.values()];
+}
 
-  document.getElementById("gym-start-btn").addEventListener("click", () => {
-    const selected = document.querySelector('#gym-type-rail .chip[aria-pressed="true"]');
-    if (!selected) {
-      alert("Pick a session type first.");
-      return;
-    }
-    gymSession = { type: selected.dataset.gymType, sets: [] };
-    saveSessionProgress();
-    renderGymSets();
-  });
+// What a session is called everywhere: its name if it has one, otherwise the
+// muscle groups trained, otherwise just the type.
+function gymSessionTitle(session) {
+  const name = String(session.sessionName ?? session.name ?? "").trim();
+  if (name) return name;
+  const groups = gymMuscleGroups(session.sets);
+  if (groups.length) return groups.slice(0, 3).join(" · ") + (groups.length > 3 ? ` +${groups.length - 3}` : "");
+  return gymTypeLabel(session.type);
 }
 
 function getDistinctGymValues(key) {
@@ -39,82 +74,288 @@ function getDistinctGymValues(key) {
   return [...new Set(values)];
 }
 
+// How an exercise was measured last time, so typing "Rowing" flips the set
+// to time/distance without being asked.
+function lastMeasureFor(exercise) {
+  const name = String(exercise || "").trim().toLowerCase();
+  if (!name) return null;
+  const sessions = matches.filter(m => m.sport === "gym").sort((x, y) => (y.date || "").localeCompare(x.date || ""));
+  for (const m of sessions) {
+    const hit = (m.sets || []).find(s => (s.exercise || "").trim().toLowerCase() === name);
+    if (hit) return hit.measure || "reps";
+  }
+  return null;
+}
+
+function copySetsForRepeat(sets) {
+  return (sets || []).map(s => ({ ...blankGymSet(s.measure || "reps"), ...s, measure: s.measure || "reps" }));
+}
+
+function buildGymSetup() {
+  // Most recent first. A named session (e.g. "Push day") appears once, as its
+  // latest version, so a regular routine doesn't fill the whole list.
+  const seenNames = new Set();
+  const recent = matches
+    .filter(m => m.sport === "gym" && (m.sets || []).length)
+    .sort((x, y) => (y.date || "").localeCompare(x.date || ""))
+    .filter(m => {
+      const name = String(m.sessionName || "").trim().toLowerCase();
+      if (!name) return true;
+      if (seenNames.has(name)) return false;
+      seenNames.add(name);
+      return true;
+    })
+    .slice(0, 5);
+
+  const recentHtml = recent.map(m => `
+      <button type="button" class="repeat-row" data-repeat-session="${m.id}">
+        <span class="repeat-row__main">
+          <span class="repeat-row__title">${escapeHtml(gymSessionTitle(m))}</span>
+          <span class="repeat-row__meta">${m.date ? formatFixtureDate(m.date) : ""} · ${m.sets.length} set${m.sets.length === 1 ? "" : "s"} · ${escapeHtml(gymTypeLabel(m.type))}</span>
+        </span>
+        <span class="chip" aria-hidden="true">Repeat</span>
+      </button>
+    `).join("");
+
+  form.dataset.sport = "gym";
+  form.innerHTML = `
+    <p class="label">New session</p>
+    <div class="chips" id="gym-type-rail" style="flex-wrap:wrap;margin-top:8px;">
+      ${GYM_TYPES.map(t => `<button type="button" class="chip" data-gym-type="${t.id}" data-sport="gym" aria-pressed="false">${t.label}</button>`).join("")}
+    </div>
+    <button type="button" id="gym-start-btn" class="btn" style="margin-top:16px;">Start session</button>
+    ${recent.length ? `
+      <p class="label" style="margin-top:24px;">Or repeat a recent one</p>
+      <p style="font:var(--t-body);color:var(--muted);margin:4px 0 8px;">Copies every exercise, weight and time in, ready to change.</p>
+      <div class="card" id="gym-repeat-list" style="padding-top:4px;padding-bottom:4px;">${recentHtml}</div>
+    ` : ""}
+  `;
+
+  document.getElementById("gym-type-rail").addEventListener("click", (event) => {
+    const chip = event.target.closest(".chip");
+    if (!chip) return;
+    document.querySelectorAll("#gym-type-rail .chip").forEach(c => c.setAttribute("aria-pressed", c === chip ? "true" : "false"));
+  });
+
+  document.getElementById("gym-start-btn").addEventListener("click", () => {
+    const selected = document.querySelector('#gym-type-rail .chip[aria-pressed="true"]');
+    if (!selected) {
+      alert("Pick a session type first.");
+      return;
+    }
+    const type = selected.dataset.gymType;
+    gymSession = { type, name: "", sets: [blankGymSet(type === "cardio" ? "time" : "reps")] };
+    saveSessionProgress();
+    renderGymSets();
+  });
+
+  document.getElementById("gym-repeat-list")?.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-repeat-session]");
+    if (!row) return;
+    const match = matches.find(m => m.id === row.dataset.repeatSession);
+    if (match) startRepeatSession(match);
+  });
+}
+
+function startRepeatSession(match) {
+  gymSession = {
+    type: match.type,
+    name: match.sessionName || "",
+    sets: copySetsForRepeat(match.sets),
+    repeatedFrom: match.date || null
+  };
+  saveSessionProgress();
+  renderGymSets();
+}
+
+// From a past session's detail screen. Doesn't silently throw away a session
+// that's already in progress.
+function repeatGymSession(match) {
+  if (localStorage.getItem("inProgressGymSession")) {
+    const replace = confirm("You already have a gym session in progress. Replace it with a copy of this one?");
+    if (!replace) return;
+  }
+  setView("gym");
+  openScreen("Log a session");
+  startRepeatSession(match);
+}
+
 function renderGymSets() {
   const exerciseOptions = getDistinctGymValues("exercise")
     .map(v => `<option value="${escapeHtml(v)}"></option>`).join("");
   const muscleOptions = getDistinctGymValues("muscleGroup")
     .map(v => `<option value="${escapeHtml(v)}"></option>`).join("");
+  const nameOptions = [...new Set(matches.filter(m => m.sport === "gym").map(m => String(m.sessionName || "").trim()).filter(Boolean))]
+    .map(v => `<option value="${escapeHtml(v)}"></option>`).join("");
+  const groups = gymMuscleGroups(gymSession.sets);
+
+  const measureFields = (set, index) => set.measure === "time" ? `
+      <div style="display:flex; gap:8px;">
+        <div class="field" style="flex:1;">
+          <label class="label" for="set-duration-${index}">Time</label>
+          <input type="text" inputmode="decimal" id="set-duration-${index}" value="${escapeHtml(formatDuration(set.duration))}" placeholder="mm:ss">
+        </div>
+        <div class="field" style="flex:1;">
+          <label class="label" for="set-distance-${index}">Distance (km)</label>
+          <input type="number" inputmode="decimal" step="0.01" id="set-distance-${index}" value="${set.distance}">
+        </div>
+      </div>` : `
+      <div style="display:flex; gap:8px;">
+        <div class="field" style="flex:1;">
+          <label class="label" for="set-weight-${index}">Weight</label>
+          <input type="number" inputmode="decimal" id="set-weight-${index}" value="${set.weight}">
+        </div>
+        <div class="field" style="flex:1;">
+          <label class="label" for="set-reps-${index}">Reps</label>
+          <input type="number" inputmode="numeric" id="set-reps-${index}" value="${set.reps}">
+        </div>
+        <div class="field" style="flex:1;">
+          <label class="label" for="set-rounds-${index}">Rounds</label>
+          <input type="number" inputmode="numeric" id="set-rounds-${index}" value="${set.rounds}">
+        </div>
+      </div>`;
 
   const setsHtml = gymSession.sets.map((set, index) => `
-    <div class="card" style="margin-bottom:10px;">
-      <div class="field">
+    <div class="card gym-set" style="margin-bottom:10px;">
+      <div class="card-head" style="align-items:center;">
+        <p class="label">Set ${index + 1}</p>
+        <div class="chips" role="group" aria-label="Measured by">
+          <button type="button" class="chip chip--sm" data-set-measure="reps" data-i="${index}" aria-pressed="${set.measure !== "time"}">Reps</button>
+          <button type="button" class="chip chip--sm" data-set-measure="time" data-i="${index}" aria-pressed="${set.measure === "time"}">Time / distance</button>
+        </div>
+      </div>
+      <div class="field" style="margin-top:10px;">
         <label class="label" for="set-exercise-${index}">Exercise</label>
-        <input type="text" id="set-exercise-${index}" value="${escapeHtml(set.exercise)}" list="exercise-options">
+        <input type="text" id="set-exercise-${index}" data-exercise-i="${index}" value="${escapeHtml(set.exercise)}" list="exercise-options">
       </div>
       <div class="field">
         <label class="label" for="set-muscle-${index}">Muscle group</label>
         <input type="text" id="set-muscle-${index}" value="${escapeHtml(set.muscleGroup)}" list="muscle-options">
       </div>
-      <div style="display:flex; gap:8px;">
-        <div class="field" style="flex:1;">
-          <label class="label" for="set-weight-${index}">Weight</label>
-          <input type="number" id="set-weight-${index}" value="${set.weight}">
-        </div>
-        <div class="field" style="flex:1;">
-          <label class="label" for="set-reps-${index}">Reps</label>
-          <input type="number" id="set-reps-${index}" value="${set.reps}">
-        </div>
-        <div class="field" style="flex:1;">
-          <label class="label" for="set-rounds-${index}">Rounds</label>
-          <input type="number" id="set-rounds-${index}" value="${set.rounds}">
-        </div>
-      </div>
+      ${measureFields(set, index)}
       <button type="button" class="btn btn--ghost btn--sm" data-remove-set="${index}" style="margin-top:8px;">Remove set</button>
     </div>
   `).join("");
 
+  form.dataset.sport = "gym";
   form.innerHTML = `
     <datalist id="exercise-options">${exerciseOptions}</datalist>
     <datalist id="muscle-options">${muscleOptions}</datalist>
-    <p class="label">${sportNames.gym} · ${escapeHtml(gymSession.type)}</p>
-    <div id="gym-sets-list">${setsHtml}</div>
+    <datalist id="session-name-options">${nameOptions}</datalist>
+    <p class="label">${sportNames.gym} · ${escapeHtml(gymTypeLabel(gymSession.type))}</p>
+    <div class="field" style="margin-top:10px;">
+      <label class="label" for="gym-session-name">Session name (optional)</label>
+      <input type="text" id="gym-session-name" maxlength="60" list="session-name-options" value="${escapeHtml(gymSession.name)}" placeholder="${escapeHtml(groups.length ? groups.slice(0, 3).join(" · ") : "e.g. Push day")}">
+    </div>
+    ${gymSession.repeatedFrom ? `<p class="repeat-banner">Copied from ${formatFixtureDate(gymSession.repeatedFrom)}. Change anything that was different this time.</p>` : ""}
+    <div id="gym-sets-list" style="margin-top:10px;">${setsHtml || `<p class="empty-state">No sets yet.</p>`}</div>
     <button type="button" id="gym-add-set-btn" class="btn btn--ghost" style="margin-top:8px;">+ Add set</button>
-    <button type="button" id="gym-finish-btn" class="btn" style="margin-top:16px;">Finish Session</button>
+    <button type="button" id="gym-finish-btn" class="btn" style="margin-top:16px;">Finish session</button>
   `;
 
+  const persist = () => { if (!gymSession.editingMatchId) saveSessionProgress(); };
+
+  document.getElementById("gym-session-name").addEventListener("change", (event) => {
+    gymSession.name = event.target.value.trim();
+    persist();
+  });
+
+  // New sets start as a copy of the one above (same exercise, weight, time),
+  // since most sets repeat the last one with a small change.
   document.getElementById("gym-add-set-btn").addEventListener("click", () => {
     saveGymSetInputs();
-    gymSession.sets.push({ exercise: "", muscleGroup: "", weight: "", reps: "", rounds: "" });
-if (!gymSession.editingMatchId) saveSessionProgress();
+    const last = gymSession.sets[gymSession.sets.length - 1];
+    gymSession.sets.push(last ? { ...last } : blankGymSet(gymSession.type === "cardio" ? "time" : "reps"));
+    persist();
     renderGymSets();
   });
 
-  document.querySelectorAll("[data-remove-set]").forEach(btn => {
+  form.querySelectorAll("[data-remove-set]").forEach(btn => {
     btn.addEventListener("click", () => {
       saveGymSetInputs();
       gymSession.sets.splice(Number(btn.dataset.removeSet), 1);
-if (!gymSession.editingMatchId) saveSessionProgress();
+      persist();
       renderGymSets();
+    });
+  });
+
+  form.querySelectorAll("[data-set-measure]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      saveGymSetInputs();
+      gymSession.sets[Number(btn.dataset.i)].measure = btn.dataset.setMeasure;
+      persist();
+      renderGymSets();
+    });
+  });
+
+  form.querySelectorAll("[data-exercise-i]").forEach(input => {
+    input.addEventListener("change", () => {
+      const i = Number(input.dataset.exerciseI);
+      saveGymSetInputs();
+      const set = gymSession.sets[i];
+      const usual = lastMeasureFor(set.exercise);
+      const untouched = set.measure === "time" ? !set.duration && !set.distance : !set.weight && !set.reps && !set.rounds;
+      if (usual && usual !== set.measure && untouched) {
+        set.measure = usual;
+        persist();
+        renderGymSets();
+        document.getElementById(usual === "time" ? `set-duration-${i}` : `set-weight-${i}`)?.focus();
+      } else {
+        persist();
+      }
     });
   });
 
   document.getElementById("gym-finish-btn").addEventListener("click", () => {
     saveGymSetInputs();
-    finishGymSession(); // build this next, mirroring finishGolfRound
+    const unreadable = gymSession.sets.findIndex((s, i) =>
+      s.measure === "time" && document.getElementById(`set-duration-${i}`)?.value.trim() && s.duration === "");
+    if (unreadable !== -1) {
+      const input = document.getElementById(`set-duration-${unreadable}`);
+      input.focus();
+      alert("That time doesn't look right. Use minutes (25) or mm:ss (25:30).");
+      return;
+    }
+    finishGymSession();
   });
-  // ...rest of the function (listeners) stays exactly as it is
 }
 
 function saveGymSetInputs() {
+  const val = (id) => document.getElementById(id)?.value ?? "";
+  if (document.getElementById("gym-session-name")) gymSession.name = val("gym-session-name").trim();
   gymSession.sets.forEach((set, index) => {
-    set.exercise = document.getElementById(`set-exercise-${index}`)?.value || "";
-    set.muscleGroup = document.getElementById(`set-muscle-${index}`)?.value || "";
-    set.weight = document.getElementById(`set-weight-${index}`)?.value !== "" 
-  ? Number(document.getElementById(`set-weight-${index}`).value) 
-  : "";
-    set.reps = Number(document.getElementById(`set-reps-${index}`)?.value) || "";
-    set.rounds = Number(document.getElementById(`set-rounds-${index}`)?.value) || "";
+    set.exercise = val(`set-exercise-${index}`).trim();
+    set.muscleGroup = val(`set-muscle-${index}`).trim();
+    // Only the visible fields are read, so switching a set between reps and
+    // time keeps whatever was typed in the other mode until it's saved.
+    if (set.measure === "time") {
+      set.duration = parseDuration(val(`set-duration-${index}`));
+      set.distance = val(`set-distance-${index}`) !== "" ? Number(val(`set-distance-${index}`)) : "";
+    } else {
+      set.weight = val(`set-weight-${index}`) !== "" ? Number(val(`set-weight-${index}`)) : "";
+      set.reps = Number(val(`set-reps-${index}`)) || "";
+      set.rounds = Number(val(`set-rounds-${index}`)) || "";
+    }
   });
+}
+
+// What gets written to gym_sets. A set stores only the fields for its measure,
+// so a set switched from reps to time doesn't keep stale weights.
+function gymSetRow(set, index, matchId) {
+  const isTime = set.measure === "time";
+  const num = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
+  return {
+    match_id: matchId,
+    set_number: index + 1,
+    exercise: set.exercise,
+    muscle_group: set.muscleGroup,
+    measure: isTime ? "time" : "reps",
+    weight: isTime ? null : num(set.weight),
+    reps: isTime ? null : num(set.reps),
+    rounds: isTime ? null : num(set.rounds),
+    duration_seconds: isTime ? num(set.duration) : null,
+    distance_m: isTime && set.distance !== "" ? Math.round(Number(set.distance) * 1000) : null
+  };
 }
 
 function finishGymSession() {
@@ -162,7 +403,7 @@ function finishGymSession() {
 
       const { error: detailError } = await supabaseClient
         .from("gym_details")
-        .update({ type: gymSession.type })
+        .update({ type: gymSession.type, name: gymSession.name || null })
         .eq("match_id", matchId);
       // An edit can't be rolled back, so say exactly what didn't save and leave
       // the screen open so they can try again, instead of failing silently.
@@ -179,15 +420,7 @@ function finishGymSession() {
         return;
       }
 
-      const setRows = gymSession.sets.map((set, index) => ({
-        match_id: matchId,
-        set_number: index + 1,
-        exercise: set.exercise,
-        muscle_group: set.muscleGroup,
-        weight: set.weight === "" ? null : Number(set.weight),
-        reps: set.reps === "" ? null : Number(set.reps),
-        rounds: set.rounds === "" ? null : Number(set.rounds)
-      }));
+      const setRows = gymSession.sets.map((set, index) => gymSetRow(set, index, matchId));
       const { error: setsError } = await supabaseClient.from("gym_sets").insert(setRows);
       if (setsError) {
         console.error("Failed to save updated sets:", setsError);
@@ -209,17 +442,9 @@ function finishGymSession() {
 
       const { error: detailError } = await supabaseClient
         .from("gym_details")
-        .insert({ match_id: matchRow.id, type: gymSession.type });
+        .insert({ match_id: matchRow.id, type: gymSession.type, name: gymSession.name || null });
 
-      const setRows = gymSession.sets.map((set, index) => ({
-        match_id: matchRow.id,
-        set_number: index + 1,
-        exercise: set.exercise,
-        muscle_group: set.muscleGroup,
-        weight: set.weight === "" ? null : Number(set.weight),
-        reps: set.reps === "" ? null : Number(set.reps),
-        rounds: set.rounds === "" ? null : Number(set.rounds)
-      }));
+      const setRows = gymSession.sets.map((set, index) => gymSetRow(set, index, matchRow.id));
       const { error: setsError } = detailError
         ? { error: null }
         : await supabaseClient.from("gym_sets").insert(setRows);
@@ -256,7 +481,8 @@ function editGymSession(match) {
   gymSession = {
     editingMatchId: match.id,
     type: match.type,
-    sets: match.sets.map(s => ({ ...s }))
+    name: match.sessionName || "",
+    sets: copySetsForRepeat(match.sets)
   };
   openScreen("Edit session");
   renderGymSets();

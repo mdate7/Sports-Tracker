@@ -33,7 +33,6 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Gym
 
-- [ ] Mixed sessions
 - [ ] Timer
 - [ ] Review screen
 
@@ -64,6 +63,8 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Done recently
 
+- [x] Gym: optional session names ("Push day"); unnamed sessions are titled by muscle groups. Repeat list shows the latest of each named session.
+- [x] Gym: repeat a recent session (from the setup screen or a session's detail page) and edit it; sets measured by reps or by time/distance, mixed freely in one session (covers "mixed sessions"); Cardio session type; + Add set copies the set above.
 - [x] Team view redesign: next match pinned with team sheet/result buttons, season chips (Aug–Jul), season summary with W–D–L, goals, GD and a last-5 form strip, tappable results list, per-season player table (apps, goals, assists, MOTM). Members tucked into a collapsible section. (Built without access to the Claude Design files.)
 - [x] Goal-by-goal result entry: Goal 1 → scorer / assist dropdowns from the squad, with own goals and "not sure"; cards as one compact line per player.
 - [x] Golf scorecard review: front 9 / back 9 with Out/In subtotals and live totals, traditional score marks (circle birdie, double circle eagle, square bogey, filled square double+), missing holes marked and jumped to. Strip colours: par is now neutral so birdies stand out. (Answers the birdie/eagle question: shapes rather than more accent colours.)
