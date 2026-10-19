@@ -86,9 +86,11 @@ function flattenMatchRow(row) {
       strokes: d.strokes,
       par: d.par,
       holesPlayed: d.holes_played,
+      playingHandicap: d.playing_handicap ?? null,
+      stablefordPoints: d.stableford_points ?? null,
       holes: (row.golf_holes || [])
         .sort((a, b) => a.hole_number - b.hole_number)
-        .map(h => ({ par: h.par, strokes: h.strokes, putts: h.putts }))
+        .map(h => ({ par: h.par, strokes: h.strokes, putts: h.putts, si: h.stroke_index ?? "" }))
     };
   }
 
@@ -150,7 +152,9 @@ const sportFields = {
     { key: "strokes", label: "Total Strokes", type: "number", summary: true },
     { key: "par", label: "Course Par", type: "number" },
     { key: "holesPlayed", label: "Holes Played", type: "number" },
-    { key: "playedWith", label: "Played With", type: "text", summary: true, autocomplete: true }
+    { key: "playedWith", label: "Played With", type: "text", summary: true, autocomplete: true },
+    { key: "stablefordPoints", label: "Stableford points", type: "number" },
+    { key: "playingHandicap", label: "Playing handicap", type: "number" }
   ],
   gym: [
     { key: "typeLabel", label: "Session Type", type: "text", summary: true },
@@ -235,6 +239,14 @@ function closeEntryScreen() {
 }
 
 document.getElementById("screen-back-btn").addEventListener("click", closeEntryScreen);
+
+// How a stored field reads on cards: a plus handicap is stored as a negative
+// number but golfers write it "+2".
+function fieldDisplay(f, match) {
+  const v = match[f.key];
+  if (f.key === "playingHandicap" && Number.isFinite(v)) return handicapLabel(v);
+  return v;
+}
 
 function getFieldsForSport(sport) {
   return [...commonFields, ...sportFields[sport]];
@@ -364,6 +376,7 @@ function renderGolfDetailHtml(match) {
       <div><span class="stat-value num">${pars}</span><p class="label">Pars</p></div>
       <div><span class="stat-value num">${bogeysPlus}</span><p class="label">Bogeys+</p></div>
       <div><span class="stat-value num">${totalPutts}</span><p class="label">Putts</p></div>
+      ${Number.isFinite(match.stablefordPoints) ? `<div><span class="stat-value num">${match.stablefordPoints}</span><p class="label">Points</p></div>` : ""}
     </div>
   `;
 }
@@ -610,7 +623,9 @@ function renderMatch(match) {
     </div>
   `).join("");
 
-  const detailRows = detailFields.map(f => `<li>${f.label}: ${escapeHtml(match[f.key])}</li>`).join("");
+  const detailRows = detailFields
+    .filter(f => match[f.key] !== null && match[f.key] !== undefined && match[f.key] !== "")
+    .map(f => `<li>${f.label}: ${escapeHtml(fieldDisplay(f, match))}</li>`).join("");
   const golfBreakdown = match.sport === "golf" ? renderGolfDetailHtml(match) : "";
   const gymBreakdown = match.sport === "gym" ? renderGymDetailHtml(match) : "";
 
@@ -777,7 +792,7 @@ function renderMatchDetailScreen() {
   // Fields that aren't summary stats (notes, assists, position...), which the
   // feed card keeps behind "View details". Shown here in full.
   const extraRows = fields.filter(f => !f.summary && match[f.key] !== null && match[f.key] !== undefined && match[f.key] !== "")
-    .map(f => `<li>${f.label}: ${escapeHtml(match[f.key])}</li>`).join("");
+    .map(f => `<li>${f.label}: ${escapeHtml(fieldDisplay(f, match))}</li>`).join("");
   const editNoun = match.sport === "golf" ? "round" : match.sport === "gym" ? "session" : "match";
   const editButton = `
     <div class="detail-actions">
