@@ -19,7 +19,7 @@ A personal multi-sport tracker (football, golf, gym, cricket, plus teams), live 
 | `script.js` | Service worker registration, loading and flattening matches, feed rendering (`renderMatch`, `renderList`, `renderView`), `openScreen()`/`closeScreen()`/`closeEntryScreen()`, the generic form builder, the profile screen, edit/delete, `init()`. |
 | `auth.js` | Loads first. The Supabase client (`supabaseClient`), the shared `escapeHtml()` helper, `ensureSignedIn`, `loadProfile`, onboarding (sport picker). |
 | `football.js` | Personal football match form, plus drafts saved to localStorage. |
-| `golf.js` | Golf setup, hole-by-hole entry, scorecard photo upload (`handleScorecardUpload` → `parse-scorecard`), scorecard review, `finishGolfRound`. |
+| `golf.js` | Stableford (`shotsReceived`, `stablefordFor`: WHS allocation by SI rank, works for 9 or 18 holes, negative handicap = plus), golf setup, hole-by-hole entry, scorecard photo upload (`handleScorecardUpload` → `parse-scorecard`), scorecard review, `finishGolfRound`. |
 | `gym.js` | Gym session and set entry (each set is `measure: "reps"` or `"time"`), repeat-a-session, `finishGymSession`. |
 | `social.js` | Likes (`loadLikes`, `toggleLike`, `paintLikes`, `refreshOwnLikes`) and following: `loadFollows`, `followPerson`/`unfollowPerson`, the Following feed (`feedScope`, `renderFollowingFeed`, read-only `friendMatchCardHtml`), and the People screen (`meSubView === "people"`). Loads before `script.js`, so it can't use `script.js` globals at load time, only inside functions. |
 | `insights.js` | The Insights tab (`renderInsights`): stats and hand-built SVG charts computed from the signed-in user's `matches`. Chart marks use the `--chart-*` tokens, never the `--sport` accents. |

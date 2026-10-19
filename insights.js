@@ -293,6 +293,7 @@ function golfHtml(list) {
         ${statTile("Last 5", fmt(Math.round(recentAvg * 10) / 10), recentAvg < avg ? "better than avg" : recentAvg > avg ? "worse than avg" : "on your avg")}
         ${statTile("Best", fmt(vs(best)), `${escapeHtml(best.courseName || "")}${best.courseName ? " · " : ""}${shortDate(best.date)}`)}
       </div>
+      ${stablefordTilesHtml(rounds)}
       ${recent.length >= 2 ? `
         <div class="card chart">
           <div class="card-head"><p class="label">Score vs par · last ${recent.length} rounds</p><p class="label">Lower is better</p></div>
@@ -301,6 +302,19 @@ function golfHtml(list) {
         </div>` : ""}
       ${withHoles ? `<p class="insight-note">${birdies} birdie${birdies === 1 ? "" : "s"} or better across ${withHoles} round${withHoles === 1 ? "" : "s"} with hole-by-hole scores.</p>` : ""}
     </section>`;
+}
+
+// Stableford: 18-hole rounds only, so totals are comparable.
+function stablefordTilesHtml(rounds) {
+  const scored = rounds.filter(m => Number.isFinite(m.stablefordPoints) && (m.holesPlayed || (m.holes || []).length) === 18);
+  if (!scored.length) return "";
+  const avg = scored.reduce((s, m) => s + m.stablefordPoints, 0) / scored.length;
+  const best = scored.reduce((b, m) => (m.stablefordPoints > b.stablefordPoints ? m : b));
+  return `
+      <div class="stat-grid">
+        ${statTile("Stableford avg", (Math.round(avg * 10) / 10).toString(), `${scored.length} round${scored.length === 1 ? "" : "s"} of 18`)}
+        ${statTile("Best Stableford", best.stablefordPoints, `${escapeHtml(best.courseName || "")}${best.courseName ? " · " : ""}${shortDate(best.date)}`)}
+      </div>`;
 }
 
 function gymHtml(list) {
