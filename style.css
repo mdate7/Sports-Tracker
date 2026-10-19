@@ -154,7 +154,7 @@
 
 .sc-row {
   display: grid;
-  grid-template-columns: 2.25rem 1fr 1fr 1fr;
+  grid-template-columns: 2rem 0.8fr 1fr 1.15fr 1fr;
   align-items: center;
   justify-items: center;
   gap: var(--s-1);
@@ -600,3 +600,8 @@
 .like-btn:active { transform: scale(.96); }
 .likes-line { margin: var(--s-3) 0 0; font: var(--t-body); color: var(--muted); }
 [data-size="clear"] .like-btn { padding: 0 18px; border-width: 2px; }
+
+/* Golf: stroke index column is secondary, so it reads quieter than the score */
+.sc-input--si { color: var(--muted); font-weight: 400; }
+.sc-note { margin: 0 0 var(--s-3); font: var(--t-body); color: var(--muted); }
+.finish-points { text-align: center; margin: 6px 0 0; font: var(--t-value); color: var(--text); min-height: 1.2em; }

@@ -20,8 +20,9 @@ Shape:
 {
   "courseName": string or null,
   "numHoles": number,
+  "playingHandicap": number or null,
   "holes": [
-    { "holeNumber": number, "par": number or null, "strokes": number or null, "putts": number or null }
+    { "holeNumber": number, "par": number or null, "strokeIndex": number or null, "strokes": number or null, "putts": number or null }
   ]
 }
 
@@ -29,6 +30,8 @@ Rules:
 - If a value is unclear, smudged, cropped, or you are not confident, use null. Do NOT guess.
 - "strokes" is the most important field — be especially conservative here, but only use null for values you genuinely can't read, not because multiple players makes the sheet visually busy.
 - If you can't tell how many holes there are, default numHoles to the count of hole rows you can actually see.
+- "strokeIndex" is the hole's stroke index (often labelled "SI", "S.I.", "Index", "Stroke" or "HCP"), a number from 1 to 18 printed for each hole, usually next to par. Read it from the card's printed row, not from any player's handwriting. If the card shows separate indexes for men and women, use the men's (or the first-listed) one.
+- "playingHandicap" is the handicap written for that same first player, if the card has one (often a box labelled "H'cap", "HCP" or "Handicap" near the player's name). A plus handicap like "+2" should be returned as -2. Use null if there isn't one.
 - End your response with the JSON object, and nothing after it.`;
 
 Deno.serve(async (req) => {
