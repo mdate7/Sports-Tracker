@@ -421,8 +421,10 @@
 .person-row .chip[aria-pressed="false"] { background: var(--sport); color: var(--on-accent); border-color: transparent; }
 
 .privacy-note { margin: var(--s-3) 0; font: var(--t-body); color: var(--muted); }
+/* The .field border already lights up on focus (:focus-within), so the
+   browser's own focus ring inside it was a second, clashing box. */
 .field input[type="search"] { -webkit-appearance: none; appearance: none; }
-.field input[type="search"]:focus { outline: none; }
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; }
 
 /* --- Insights --- */
 
