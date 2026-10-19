@@ -537,7 +537,7 @@ function renderProfileScreen() {
         <button type="button" class="chip" data-theme-option="light" aria-pressed="${themePref === "light"}">Light</button>
         <button type="button" class="chip" data-theme-option="system" aria-pressed="${themePref === "system"}">Match phone</button>
       </div>
-      <p class="label" style="margin-top:18px;">Bigger &amp; clearer</p>
+      <p class="label" style="margin-top:18px;">OAP</p>
       <p class="tiny" style="font:var(--t-body);color:var(--muted);margin:4px 0 0;">Larger text, more space and stronger contrast, with less on each card.</p>
       <div class="rail" id="me-size" style="flex-wrap:wrap;margin-top:10px;">
         <button type="button" class="chip" data-size-option="off" aria-pressed="${sizePref === "off"}">Off</button>
