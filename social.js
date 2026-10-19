@@ -13,7 +13,7 @@ let followingMatches = null;        // cached Following feed; null = needs loadi
 const peopleById = new Map();       // id -> { id, display_name, sports_tracked }
 let meSubView = null;               // null | "people"
 let myUserId = null;
-const likesByMatch = new Map();     // match id -> Set of user ids who clapped
+const likesByMatch = new Map();     // match id -> Set of user ids who sent a beer
 let ownLikesLoadedAt = 0;
 
 async function loadFollows() {
@@ -74,9 +74,9 @@ async function unfollowPerson(id) {
   return true;
 }
 
-// --- Likes (👏) ---------------------------------------------------------------
+// --- Likes (🍺 beers) ---------------------------------------------------------
 // RLS only returns likes on activities you can see (your own and people you
-// follow), and only lets you clap for other people's.
+// follow), and only lets you send a beer for other people's.
 
 async function loadLikes(matchIds) {
   const ids = [...new Set(matchIds)].filter(Boolean);
@@ -97,7 +97,7 @@ async function loadLikes(matchIds) {
 function likeButtonHtml(matchId) {
   const set = likesByMatch.get(matchId) || new Set();
   const mine = set.has(myUserId);
-  return `<button type="button" class="like-btn" data-like="${matchId}" aria-pressed="${mine}" aria-label="${mine ? "Remove your clap" : "Clap for this"}">👏<span class="num">${set.size || ""}</span></button>`;
+  return `<button type="button" class="like-btn" data-like="${matchId}" aria-pressed="${mine}" aria-label="${mine ? "Take back your beer" : "Send a beer"}">🍺<span class="num">${set.size || ""}</span></button>`;
 }
 
 // "Harry Shepherd", "Harry and Jake", "Harry, Jake and 3 others"
@@ -105,9 +105,9 @@ function likesLineText(matchId) {
   const ids = [...(likesByMatch.get(matchId) || [])];
   if (!ids.length) return "";
   const first = (id) => personName(id).split(" ")[0];
-  if (ids.length === 1) return `👏 ${escapeHtml(personName(ids[0]))}`;
-  if (ids.length === 2) return `👏 ${escapeHtml(first(ids[0]))} and ${escapeHtml(first(ids[1]))}`;
-  return `👏 ${escapeHtml(first(ids[0]))}, ${escapeHtml(first(ids[1]))} and ${ids.length - 2} other${ids.length - 2 === 1 ? "" : "s"}`;
+  if (ids.length === 1) return `🍺 ${escapeHtml(personName(ids[0]))}`;
+  if (ids.length === 2) return `🍺 ${escapeHtml(first(ids[0]))} and ${escapeHtml(first(ids[1]))}`;
+  return `🍺 ${escapeHtml(first(ids[0]))}, ${escapeHtml(first(ids[1]))} and ${ids.length - 2} other${ids.length - 2 === 1 ? "" : "s"}`;
 }
 
 // Update every like button / likes line on screen without re-rendering cards.
