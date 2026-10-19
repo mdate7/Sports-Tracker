@@ -39,7 +39,6 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 ## Social
 
 - [ ] Sport grouping
-- [ ] Likes
 
 ## Stats and insights
 
@@ -57,6 +56,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Done recently
 
+- [x] Likes (👏): clap button on Following cards with a count (tap again to remove); your own cards show who clapped ("Harry, Priya and 1 other"). `likes` table: you can clap only for activities you can see and not your own.
 - [x] Bigger & clearer mode (Me → Appearance: Off / On / Match phone, default Match phone): larger type, spacing and tap targets, stronger contrast, sentence-case labels; feed cards cut to what/when/result with Open → detail page; Insights one stat per row with charts folded. Detail page now has Edit and Delete for every sport. Stat rows wrap (football cards used to run off the edge).
 - [x] Display names required: asked at onboarding, and once for existing accounts without one (pre-filled from their team-sheet name); can't be blanked on the Me screen. Until set, search falls back to the team-sheet name. One-off backfill: `supabase/scripts/2026-10-18_backfill_display_names.sql`.
 - [x] Football rating: 1–10 rating chips on the personal football form (log and edit), so games added from a team result or the backfill can be rated afterwards. Fixed team results skipping your personal record when a followed teammate already had one for that fixture. Football saves now roll back a half-failed save like golf/gym.

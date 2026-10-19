@@ -21,7 +21,7 @@ A personal multi-sport tracker (football, golf, gym, cricket, plus teams), live 
 | `football.js` | Personal football match form, plus drafts saved to localStorage. |
 | `golf.js` | Golf setup, hole-by-hole entry, scorecard photo upload (`handleScorecardUpload` → `parse-scorecard`), scorecard review, `finishGolfRound`. |
 | `gym.js` | Gym session and set entry (each set is `measure: "reps"` or `"time"`), repeat-a-session, `finishGymSession`. |
-| `social.js` | Following: `loadFollows`, `followPerson`/`unfollowPerson`, the Following feed (`feedScope`, `renderFollowingFeed`, read-only `friendMatchCardHtml`), and the People screen (`meSubView === "people"`). Loads before `script.js`, so it can't use `script.js` globals at load time, only inside functions. |
+| `social.js` | Likes (`loadLikes`, `toggleLike`, `paintLikes`, `refreshOwnLikes`) and following: `loadFollows`, `followPerson`/`unfollowPerson`, the Following feed (`feedScope`, `renderFollowingFeed`, read-only `friendMatchCardHtml`), and the People screen (`meSubView === "people"`). Loads before `script.js`, so it can't use `script.js` globals at load time, only inside functions. |
 | `insights.js` | The Insights tab (`renderInsights`): stats and hand-built SVG charts computed from the signed-in user's `matches`. Chart marks use the `--chart-*` tokens, never the `--sport` accents. |
 | `teams.js` | Teams, invites, fixtures, team sheets, ad-hoc players (`ensurePlayersForTeam`), and the three-step result entry flow (`renderResultScoreStep` → `renderResultEventsStep` → `renderResultPublishStep` → `publishResult`). |
 | `Clubhouse-tokens.css` | The "Floodlight" design system: CSS custom-property tokens, dark-first, with light-mode tokens present. |
@@ -33,7 +33,7 @@ A personal multi-sport tracker (football, golf, gym, cricket, plus teams), live 
 
 ## Data model (tables the client touches)
 
-`profiles`, `matches` (one row per personal activity), `football_details` / `golf_details` / `gym_details` (one detail row per match), `golf_holes`, `gym_sets`, `courses`, `teams`, `team_members`, `fixtures`, `team_sheets`, `team_sheet_selections`, `players`, `fixture_appearances`, `follows` (follower_id → followee_id).
+`profiles`, `matches` (one row per personal activity), `football_details` / `golf_details` / `gym_details` (one detail row per match), `golf_holes`, `gym_sets`, `courses`, `teams`, `team_members`, `fixtures`, `team_sheets`, `team_sheet_selections`, `players`, `fixture_appearances`, `follows` (follower_id → followee_id), `likes` (user_id, match_id; visible to anyone who can see the activity).
 
 Most of these were created in the Supabase Dashboard before migrations were used, so the SQL for them isn't in the repo. Don't infer a table's columns or RLS policies from `supabase/migrations/`. Read how the code uses the table, or ask Mihir to run `supabase db pull` so the schema can be committed.
 

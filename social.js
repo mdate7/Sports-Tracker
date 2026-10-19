@@ -12,6 +12,9 @@ let followerIds = new Set();        // people who follow me
 let followingMatches = null;        // cached Following feed; null = needs loading
 const peopleById = new Map();       // id -> { id, display_name, sports_tracked }
 let meSubView = null;               // null | "people"
+let myUserId = null;
+const likesByMatch = new Map();     // match id -> Set of user ids who clapped
+let ownLikesLoadedAt = 0;
 
 async function loadFollows() {
   const userId = await ensureSignedIn();
@@ -22,6 +25,7 @@ async function loadFollows() {
     console.error("Failed to load follows:", error);
     return;
   }
+  myUserId = userId;
   followingIds = new Set(data.filter(r => r.follower_id === userId).map(r => r.followee_id));
   followerIds = new Set(data.filter(r => r.followee_id === userId).map(r => r.follower_id));
 }
@@ -68,6 +72,80 @@ async function unfollowPerson(id) {
   followingIds.delete(id);
   followingMatches = null;
   return true;
+}
+
+// --- Likes (👏) ---------------------------------------------------------------
+// RLS only returns likes on activities you can see (your own and people you
+// follow), and only lets you clap for other people's.
+
+async function loadLikes(matchIds) {
+  const ids = [...new Set(matchIds)].filter(Boolean);
+  if (!ids.length) return;
+  for (let i = 0; i < ids.length; i += 100) {  // keep the request URL short
+    const chunk = ids.slice(i, i + 100);
+    const { data, error } = await supabaseClient.from("likes").select("match_id, user_id").in("match_id", chunk);
+    if (error) {
+      console.error("Failed to load likes:", error);
+      return;
+    }
+    chunk.forEach(id => likesByMatch.set(id, new Set()));
+    data.forEach(r => likesByMatch.get(r.match_id)?.add(r.user_id));
+  }
+  await ensurePeople([...ids.flatMap(id => [...(likesByMatch.get(id) || [])])]);
+}
+
+function likeButtonHtml(matchId) {
+  const set = likesByMatch.get(matchId) || new Set();
+  const mine = set.has(myUserId);
+  return `<button type="button" class="like-btn" data-like="${matchId}" aria-pressed="${mine}" aria-label="${mine ? "Remove your clap" : "Clap for this"}">👏<span class="num">${set.size || ""}</span></button>`;
+}
+
+// "Harry Shepherd", "Harry and Jake", "Harry, Jake and 3 others"
+function likesLineText(matchId) {
+  const ids = [...(likesByMatch.get(matchId) || [])];
+  if (!ids.length) return "";
+  const first = (id) => personName(id).split(" ")[0];
+  if (ids.length === 1) return `👏 ${escapeHtml(personName(ids[0]))}`;
+  if (ids.length === 2) return `👏 ${escapeHtml(first(ids[0]))} and ${escapeHtml(first(ids[1]))}`;
+  return `👏 ${escapeHtml(first(ids[0]))}, ${escapeHtml(first(ids[1]))} and ${ids.length - 2} other${ids.length - 2 === 1 ? "" : "s"}`;
+}
+
+// Update every like button / likes line on screen without re-rendering cards.
+function paintLikes() {
+  document.querySelectorAll("[data-like]").forEach(btn => {
+    btn.outerHTML = likeButtonHtml(btn.dataset.like);
+  });
+  document.querySelectorAll("[data-likes-for]").forEach(line => {
+    const text = likesLineText(line.dataset.likesFor);
+    line.innerHTML = text;
+    line.hidden = !text;
+  });
+}
+
+// Your own feed: fetched at most every 30s, then painted onto the cards.
+async function refreshOwnLikes(force = false) {
+  if (!force && Date.now() - ownLikesLoadedAt < 30000) { paintLikes(); return; }
+  ownLikesLoadedAt = Date.now();
+  await loadLikes(matches.map(m => m.id));
+  paintLikes();
+}
+
+async function toggleLike(matchId) {
+  const userId = myUserId || await ensureSignedIn();
+  const set = likesByMatch.get(matchId) || new Set();
+  likesByMatch.set(matchId, set);
+  const had = set.has(userId);
+  // Optimistic: show it straight away, undo if the server says no.
+  had ? set.delete(userId) : set.add(userId);
+  paintLikes();
+  const { error } = had
+    ? await supabaseClient.from("likes").delete().eq("user_id", userId).eq("match_id", matchId)
+    : await supabaseClient.from("likes").insert({ user_id: userId, match_id: matchId });
+  if (error && error.code !== "23505") { // 23505 = already liked elsewhere: fine
+    console.error("Failed to update like:", error);
+    had ? set.add(userId) : set.delete(userId);
+    paintLikes();
+  }
 }
 
 // --- Following feed --------------------------------------------------------
@@ -135,10 +213,11 @@ function friendMatchCardHtml(match) {
       </div>
       ${stats ? `<div class="stats">${stats}</div>` : ""}
       ${match.notes ? `<p class="friend-card__notes">“${escapeHtml(match.notes)}”</p>` : ""}
-      ${breakdown ? `
-        <button type="button" class="btn btn--ghost btn--sm" data-friend-toggle style="margin-top:12px;">Show breakdown</button>
-        <div class="friend-card__more" hidden>${breakdown}</div>
-      ` : ""}
+      <div class="friend-card__foot">
+        ${likeButtonHtml(match.id)}
+        ${breakdown ? `<button type="button" class="btn btn--ghost btn--sm" data-friend-toggle>Show breakdown</button>` : ""}
+      </div>
+      ${breakdown ? `<div class="friend-card__more" hidden>${breakdown}</div>` : ""}
     </div>
   `;
 }
@@ -163,6 +242,7 @@ async function renderFollowingFeed() {
       matchList.innerHTML = `<p class="empty-state">Couldn't load the feed. Pull down or switch tabs to try again.</p>`;
       return;
     }
+    await loadLikes(loaded.map(m => m.id));
     followingMatches = loaded;
   }
   const list = currentView === "all" ? followingMatches : followingMatches.filter(m => m.sport === currentView);
@@ -285,9 +365,15 @@ document.getElementById("match-list").addEventListener("click", async (event) =>
     return;
   }
 
+  const like = event.target.closest("[data-like]");
+  if (like) {
+    await toggleLike(like.dataset.like);
+    return;
+  }
+
   const toggle = event.target.closest("[data-friend-toggle]");
   if (toggle) {
-    const more = toggle.nextElementSibling;
+    const more = toggle.closest(".friend-card").querySelector(".friend-card__more");
     more.hidden = !more.hidden;
     toggle.textContent = more.hidden ? "Show breakdown" : "Hide breakdown";
     return;
