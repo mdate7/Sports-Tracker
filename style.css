@@ -585,3 +585,18 @@
 .detail-actions { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-4); }
 .detail-actions .btn { width: auto; flex: 1 1 auto; }
 .detail-list { list-style: none; padding: 0; margin: var(--s-3) 0 0; display: flex; flex-direction: column; gap: 4px; font: var(--t-body); color: var(--muted); }
+
+/* --- Likes --- */
+.friend-card__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); margin-top: var(--s-3); }
+.friend-card__foot .btn { width: auto; }
+.like-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: var(--tap-min); min-width: var(--tap-min); padding: 0 14px;
+  border-radius: var(--r-chip);
+  background: var(--surface); border: 1px solid var(--line-strong); color: var(--text);
+  font: var(--t-value); cursor: pointer;
+}
+.like-btn[aria-pressed="true"] { background: color-mix(in oklab, var(--sport) 22%, transparent); border-color: var(--sport); }
+.like-btn:active { transform: scale(.96); }
+.likes-line { margin: var(--s-3) 0 0; font: var(--t-body); color: var(--muted); }
+[data-size="clear"] .like-btn { padding: 0 18px; border-width: 2px; }

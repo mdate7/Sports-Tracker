@@ -645,6 +645,7 @@ function renderMatch(match) {
     </div>
     <div class="stats">${statBlocks}</div>
     <ul class="card-details">${detailRows}</ul>
+    <p class="likes-line" data-likes-for="${match.id}" hidden></p>
     <div class="card-actions">
       <button class="toggle-details-btn">${isClearMode() ? "Open" : "View details"}</button>
       <button class="edit-btn">Edit</button>
@@ -752,6 +753,8 @@ function renderList(list) {
       console.error("Skipped a match that failed to render:", match, err);
     }
   });
+  // Claps from followers arrive separately and are painted onto the cards.
+  refreshOwnLikes();
 }
 
 function renderMatchDetailScreen() {
