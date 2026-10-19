@@ -404,6 +404,23 @@ function renderInsights() {
 
   matchList.innerHTML = `<div class="insights">${overviewHtml(all)}${sections}</div>`;
 
+  // Bigger & clearer: charts start folded behind "Show chart" so the screen
+  // leads with a few big numbers.
+  if (isClearMode()) {
+    matchList.querySelectorAll(".card.chart").forEach(card => {
+      const body = [...card.children].filter(el => !el.classList.contains("card-head"));
+      if (!body.length) return;
+      const fold = document.createElement("details");
+      fold.className = "chart-collapse";
+      fold.innerHTML = "<summary>Show chart</summary>";
+      body.forEach(el => fold.appendChild(el));
+      card.appendChild(fold);
+      fold.addEventListener("toggle", () => {
+        fold.querySelector("summary").textContent = fold.open ? "Hide chart" : "Show chart";
+      });
+    });
+  }
+
   // Tooltips: hover on desktop, tap on phones, focus for keyboards.
   matchList.querySelectorAll(".chart-hit").forEach(el => {
     const show = () => showTip(el, el.dataset.tip);

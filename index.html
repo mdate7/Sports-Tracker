@@ -46,6 +46,53 @@
 
       paint(readThemePref());
     })();
+
+    // "Bigger & clearer" (data-size="clear" on <html>): bigger text, more
+    // spacing, stronger contrast and less on each card. Applied here for the
+    // same no-flash reason as the theme. Choice is "auto" (default: follow the
+    // phone's text size), "on" or "off", stored per device.
+    (function () {
+      function readSizePref() {
+        try { return localStorage.getItem("textSize") || "auto"; } catch (e) { return "auto"; }
+      }
+
+      // Browsers don't expose the phone's text-size setting directly. Two
+      // signals that do exist: Safari maps iOS Dynamic Type onto the
+      // -apple-system-body font (17px at the default size), and some browsers
+      // scale the root font size up from 16px. Two steps above default counts
+      // as "large".
+      function phoneTextIsLarge() {
+        try {
+          const root = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+          if (root >= 19) return true;
+          if (window.CSS && CSS.supports("font", "-apple-system-body")) {
+            const probe = document.createElement("span");
+            probe.style.cssText = "position:absolute;visibility:hidden;font:-apple-system-body";
+            document.documentElement.appendChild(probe);
+            const size = parseFloat(getComputedStyle(probe).fontSize);
+            probe.remove();
+            if (size >= 20) return true;
+          }
+        } catch (e) { /* fall through: treat as default size */ }
+        return false;
+      }
+
+      function paint(pref) {
+        const on = pref === "on" || (pref === "auto" && phoneTextIsLarge());
+        if (on) document.documentElement.setAttribute("data-size", "clear");
+        else document.documentElement.removeAttribute("data-size");
+      }
+
+      window.applyTextSize = function (pref) {
+        try { localStorage.setItem("textSize", pref); } catch (e) { /* still apply for this visit */ }
+        paint(pref);
+      };
+      window.getTextSizePref = readSizePref;
+      window.phoneTextIsLarge = phoneTextIsLarge;
+      window.isClearMode = () => document.documentElement.getAttribute("data-size") === "clear";
+
+      paint(readSizePref());
+    })();
   </script>
 </head>
 <body>

@@ -499,6 +499,7 @@ function buildForm(sport, existingMatch = null) {
 function renderProfileScreen() {
   const tracked = userProfile ? userProfile.sports_tracked : [];
   const themePref = getThemePref();
+  const sizePref = getTextSizePref();
   matchList.innerHTML = `
   <div class="field">
   <label class="label" for="me-display-name">Display name</label>
@@ -523,12 +524,28 @@ function renderProfileScreen() {
         <button type="button" class="chip" data-theme-option="light" aria-pressed="${themePref === "light"}">Light</button>
         <button type="button" class="chip" data-theme-option="system" aria-pressed="${themePref === "system"}">Match phone</button>
       </div>
+      <p class="label" style="margin-top:18px;">Bigger &amp; clearer</p>
+      <p class="tiny" style="font:var(--t-body);color:var(--muted);margin:4px 0 0;">Larger text, more space and stronger contrast, with less on each card.</p>
+      <div class="rail" id="me-size" style="flex-wrap:wrap;margin-top:10px;">
+        <button type="button" class="chip" data-size-option="off" aria-pressed="${sizePref === "off"}">Off</button>
+        <button type="button" class="chip" data-size-option="on" aria-pressed="${sizePref === "on"}">On</button>
+        <button type="button" class="chip" data-size-option="auto" aria-pressed="${sizePref === "auto"}">Match phone</button>
+      </div>
+      ${sizePref === "auto" ? `<p style="font:var(--t-body);color:var(--muted);margin:8px 0 0;">${isClearMode() ? "On, because your phone's text size is set large." : "Off, because your phone's text size is normal."}</p>` : ""}
     </div>
     ${peopleSummaryCardHtml()}
   `;
 
   // Takes effect immediately and is saved per device, so it sits outside the
   // profile Save button (which writes to Supabase).
+  // Re-renders the whole screen so the new size takes effect immediately.
+  document.getElementById("me-size").addEventListener("click", (event) => {
+    const chip = event.target.closest("[data-size-option]");
+    if (!chip) return;
+    applyTextSize(chip.dataset.sizeOption);
+    renderView();
+  });
+
   document.getElementById("me-theme").addEventListener("click", (event) => {
     const chip = event.target.closest(".chip");
     if (!chip) return;
@@ -629,7 +646,7 @@ function renderMatch(match) {
     <div class="stats">${statBlocks}</div>
     <ul class="card-details">${detailRows}</ul>
     <div class="card-actions">
-      <button class="toggle-details-btn">View details</button>
+      <button class="toggle-details-btn">${isClearMode() ? "Open" : "View details"}</button>
       <button class="edit-btn">Edit</button>
       <button class="delete-btn">Delete</button>
     </div>
@@ -638,7 +655,9 @@ function renderMatch(match) {
 const toggleBtn = card.querySelector(".toggle-details-btn");
 const detailsList = card.querySelector(".card-details");
 
-if (match.sport === "golf" || match.sport === "gym") {
+// In Bigger & clearer mode the card only shows the headline, so every sport
+// opens the full detail page (which has Edit and Delete) instead of expanding.
+if (match.sport === "golf" || match.sport === "gym" || isClearMode()) {
   toggleBtn.addEventListener("click", () => {
     currentDetailMatchId = match.id;
     renderMatchDetailScreen();
@@ -752,19 +771,25 @@ function renderMatchDetailScreen() {
   const golfBreakdown = match.sport === "golf" ? renderGolfDetailHtml(match) : "";
   const gymBreakdown = match.sport === "gym" ? renderGymDetailHtml(match) : "";
   const title = match.opponent || match.courseName || (match.sport === "gym" ? gymSessionTitle(match) : "");
-const editButton = match.sport === "golf" || match.sport === "gym"
-  ? `<div style="display:flex;gap:8px;margin-top:12px;">
-      <button type="button" id="detail-edit-btn" class="btn btn--ghost btn--sm" style="flex:1;">Edit ${match.sport === "golf" ? "round" : "session"}</button>
-      ${match.sport === "gym" && (match.sets || []).length ? `<button type="button" id="detail-repeat-btn" class="btn btn--sm" style="flex:1;">Repeat session</button>` : ""}
-    </div>`
-  : "";
+  // Fields that aren't summary stats (notes, assists, position...), which the
+  // feed card keeps behind "View details". Shown here in full.
+  const extraRows = fields.filter(f => !f.summary && match[f.key] !== null && match[f.key] !== undefined && match[f.key] !== "")
+    .map(f => `<li>${f.label}: ${escapeHtml(match[f.key])}</li>`).join("");
+  const editNoun = match.sport === "golf" ? "round" : match.sport === "gym" ? "session" : "match";
+  const editButton = `
+    <div class="detail-actions">
+      <button type="button" id="detail-edit-btn" class="btn btn--ghost btn--sm">Edit ${editNoun}</button>
+      ${match.sport === "gym" && (match.sets || []).length ? `<button type="button" id="detail-repeat-btn" class="btn btn--sm">Repeat session</button>` : ""}
+      <button type="button" id="detail-delete-btn" class="btn btn--ghost btn--sm">Delete</button>
+    </div>`;
 
   matchList.innerHTML = `
-    <div class="card" data-sport="${match.sport}">
+    <div class="card detail-card" data-sport="${match.sport}">
       <button type="button" id="detail-back-btn" class="btn btn--ghost btn--sm" style="margin-bottom:12px;">← Back</button>
       <p class="eyebrow">${sportNames[match.sport]} · ${escapeHtml(title)}</p>
       <p class="card-meta">${match.date || ""}</p>
       <div class="stats" style="margin-top:12px;">${statBlocks}</div>
+      ${extraRows ? `<ul class="detail-list">${extraRows}</ul>` : ""}
       ${golfBreakdown}
       ${gymBreakdown}
       ${editButton}
@@ -791,6 +816,18 @@ const editButton = match.sport === "golf" || match.sport === "gym"
       editGolfRound(match);
     } else if (match.sport === "gym") {
       editGymSession(match);
+    } else {
+      currentDetailMatchId = null;
+      startEdit(match.id);
+    }
+  });
+
+  document.getElementById("detail-delete-btn")?.addEventListener("click", async () => {
+    const id = match.id;
+    await deleteMatch(id); // asks to confirm; re-renders the feed if it deletes
+    if (!matches.some(m => m.id === id)) {
+      currentDetailMatchId = null;
+      renderView();
     }
   });
 }
