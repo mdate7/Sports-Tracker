@@ -753,7 +753,7 @@ function renderList(list) {
       console.error("Skipped a match that failed to render:", match, err);
     }
   });
-  // Claps from followers arrive separately and are painted onto the cards.
+  // Beers from followers arrive separately and are painted onto the cards.
   refreshOwnLikes();
 }
 
