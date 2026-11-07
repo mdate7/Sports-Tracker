@@ -156,29 +156,180 @@ function fileToBase64(file) {
   });
 }
 
-async function handleScorecardUpload(file) {
-  form.innerHTML = `<p style="font-size:13px;color:var(--muted);">Reading your scorecard...</p>`;
+// --- Scorecard photo: loading screen, and reading in the background ----------
+// Reading a card takes 10-30 seconds. The result is kept on this device under
+// SCORECARD_KEY, so someone can leave the loading screen (or the app) and come
+// back to review it from a card at the top of the feed.
+const SCORECARD_KEY = "pendingScorecard";
+const SCORECARD_STALE_MS = 3 * 60 * 1000; // a read still "reading" after this was lost
+let scorecardWatching = false;   // is the loading screen showing the read in flight?
+let scorecardRequest = 0;        // id of the latest read, so an older one can't win
+let scorecardInFlight = false;
+let scorecardTicker = null;
 
+function readPendingScorecard() {
+  try { return JSON.parse(localStorage.getItem(SCORECARD_KEY)); } catch (e) { return null; }
+}
+function writePendingScorecard(value) {
+  try {
+    if (value) localStorage.setItem(SCORECARD_KEY, JSON.stringify(value));
+    else localStorage.removeItem(SCORECARD_KEY);
+  } catch (e) { /* storage full or blocked: the loading screen still works */ }
+}
+function clearPendingScorecard() { writePendingScorecard(null); }
+
+function stopScorecardWatching() {
+  scorecardWatching = false;
+  clearInterval(scorecardTicker);
+}
+
+// A small copy of the photo for the loading screen and the feed card.
+async function makeScorecardThumb(file) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 240 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.7);
+  } catch (e) {
+    return null;
+  }
+}
+
+function refreshFeedIfVisible() {
+  if (currentMode === "feed" && form.style.display !== "flex") renderView();
+}
+
+function showScorecardLoading() {
+  const pending = readPendingScorecard();
+  if (!pending) return;
+  scorecardWatching = true;
+  const steps = ["Finding the holes…", "Reading the scores…", "Checking par and stroke index…", "Nearly there…"];
+  form.dataset.sport = "golf";
+  form.innerHTML = `
+    <div class="sc-loading" role="status" aria-live="polite">
+      ${pending.thumb ? `<img class="sc-loading__photo" src="${pending.thumb}" alt="Your scorecard photo">` : ""}
+      <div class="sc-loading__spinner" aria-hidden="true"></div>
+      <p class="sc-loading__title">Reading your scorecard</p>
+      <p class="sc-loading__step" id="sc-loading-step">${steps[0]}</p>
+      <p class="sc-loading__time num" id="sc-loading-time"></p>
+      <p class="sc-loading__note">This usually takes 10 to 30 seconds. You don't have to wait: it'll be at the top of your feed when it's ready.</p>
+      <button type="button" id="sc-loading-leave" class="btn btn--ghost">Keep using the app</button>
+    </div>`;
+  const paint = () => {
+    const secs = Math.floor((Date.now() - pending.startedAt) / 1000);
+    const step = document.getElementById("sc-loading-step");
+    const time = document.getElementById("sc-loading-time");
+    if (!step || !time) return clearInterval(scorecardTicker);
+    step.textContent = steps[Math.min(steps.length - 1, Math.floor(secs / 7))];
+    time.textContent = `${secs}s`;
+  };
+  clearInterval(scorecardTicker);
+  scorecardTicker = setInterval(paint, 1000);
+  paint();
+  document.getElementById("sc-loading-leave").addEventListener("click", () => {
+    stopScorecardWatching();
+    closeEntryScreen();
+    refreshFeedIfVisible(); // closeScreen only un-hides the feed; draw the "reading" card
+  });
+}
+
+async function handleScorecardUpload(file) {
+  const id = ++scorecardRequest;
+  const startedAt = Date.now();
+  writePendingScorecard({ status: "reading", startedAt, thumb: null });
+  showScorecardLoading();
+  scorecardInFlight = true;
+
+  // The thumbnail is made alongside the upload so it never delays the read.
+  let thumb = null;
+  makeScorecardThumb(file).then((t) => {
+    thumb = t;
+    if (!t || id !== scorecardRequest) return;
+    const p = readPendingScorecard();
+    if (p && p.status === "reading") writePendingScorecard({ ...p, thumb: t });
+    if (scorecardWatching && !document.querySelector(".sc-loading__photo")) {
+      document.querySelector(".sc-loading__spinner")
+        ?.insertAdjacentHTML("beforebegin", `<img class="sc-loading__photo" src="${t}" alt="Your scorecard photo">`);
+    }
+  });
+
+  let result;
   try {
     const imageBase64 = await fileToBase64(file);
     const { data, error } = await supabaseClient.functions.invoke("parse-scorecard", {
       body: { imageBase64, mediaType: file.type || "image/jpeg" }
     });
-
-    if (error) {
-      console.error("Scorecard parse failed:", error);
-      alert("Couldn't read that scorecard — try a clearer photo, or enter it manually.");
-      buildGolfSetup();
-      return;
-    }
-
-    buildScorecardReview(data);
+    if (error) console.error("Scorecard parse failed:", error);
+    result = error ? { status: "failed", startedAt, thumb } : { status: "ready", startedAt, thumb, parsed: data };
   } catch (err) {
     console.error("Unexpected error during scorecard upload:", err);
-    alert("Something went wrong — try again.");
-    buildGolfSetup();
+    result = { status: "failed", startedAt, thumb };
+  }
+  scorecardInFlight = false;
+  if (id !== scorecardRequest) return; // a newer photo has replaced this one
+  writePendingScorecard(result);
+
+  if (scorecardWatching) {
+    stopScorecardWatching();
+    if (result.status === "ready") {
+      buildScorecardReview(result.parsed);
+    } else {
+      clearPendingScorecard();
+      buildGolfSetup();
+      form.insertAdjacentHTML("afterbegin", `<p class="sc-note" role="alert">Couldn't read that scorecard. Try a clearer, flatter photo, or enter the round hole by hole.</p>`);
+    }
+  } else {
+    refreshFeedIfVisible();
   }
 }
+
+// The feed card for a scorecard read that's waiting, finished or failed.
+function pendingScorecardCardHtml() {
+  const p = readPendingScorecard();
+  if (!p) return "";
+  const lost = p.status === "reading" && (!scorecardInFlight || Date.now() - p.startedAt > SCORECARD_STALE_MS);
+  const status = lost ? "lost" : p.status;
+  const text = {
+    reading: ["Reading your scorecard…", "Usually takes 10 to 30 seconds"],
+    ready: ["Scorecard ready to review", escapeHtml(p.parsed?.courseName || "Check the scores, then save the round")],
+    failed: ["Couldn't read that scorecard", "Try a clearer, flatter photo"],
+    lost: ["Scorecard didn't finish reading", "The app closed while it was reading. Try again."]
+  }[status];
+  const actions = {
+    reading: `<button type="button" class="chip" data-scorecard-action="watch">Watch</button>`,
+    ready: `<button type="button" class="chip" aria-pressed="true" data-scorecard-action="review">Review</button>`,
+    failed: `<button type="button" class="chip" data-scorecard-action="retry">Try again</button>`,
+    lost: `<button type="button" class="chip" data-scorecard-action="retry">Try again</button>`
+  }[status];
+  return `
+    <div class="card sc-pending" data-sport="golf" data-scorecard-status="${status}">
+      <div class="sc-pending__row">
+        ${p.thumb ? `<img class="sc-pending__thumb" src="${p.thumb}" alt="">` : `<span class="sc-pending__thumb sc-pending__thumb--empty" aria-hidden="true">⛳</span>`}
+        <div class="sc-pending__main">
+          <p class="eyebrow">Golf · ${text[0]}</p>
+          <p class="card-meta">${text[1]}</p>
+        </div>
+      </div>
+      <div class="sc-pending__actions">
+        ${actions}
+        ${status === "reading" ? "" : `<button type="button" class="chip" data-scorecard-action="dismiss">Dismiss</button>`}
+      </div>
+    </div>`;
+}
+
+document.getElementById("match-list").addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-scorecard-action]");
+  if (!btn) return;
+  const action = btn.dataset.scorecardAction;
+  const p = readPendingScorecard();
+  if (action === "dismiss") { clearPendingScorecard(); renderView(); return; }
+  if (action === "retry") { clearPendingScorecard(); setView("golf"); openSportForm("golf"); return; }
+  if (action === "watch" && p) { setView("golf"); openScreen("Log a round"); showScorecardLoading(); return; }
+  if (action === "review" && p?.parsed) { setView("golf"); openScreen("Log a round"); buildScorecardReview(p.parsed); }
+});
 
 
 function getStrokeLabel(strokes, par) {
@@ -454,7 +605,10 @@ function buildScorecardReview(parsed) {
     if (filled) refresh();
   })();
 
-  document.getElementById("review-cancel-btn").addEventListener("click", buildGolfSetup);
+  document.getElementById("review-cancel-btn").addEventListener("click", () => {
+    clearPendingScorecard();
+    buildGolfSetup();
+  });
 
   document.getElementById("review-confirm-btn").addEventListener("click", () => {
     const updatedHoles = readHoles();
@@ -466,6 +620,7 @@ function buildScorecardReview(parsed) {
       return;
     }
 
+    clearPendingScorecard(); // it's now an in-progress round, saved as usual
     golfRound = {
       courseName: document.getElementById("review-course-name").value.trim(),
       playingHandicap: readHandicapInput("review-handicap"),

@@ -233,6 +233,7 @@ function closeScreen() {
 function closeEntryScreen() {
   // The gym rest bar sits outside the form, so it has to be put away explicitly.
   if (typeof hideRestBar === "function") hideRestBar();
+  if (typeof stopScorecardWatching === "function") stopScorecardWatching();
   editingId = null;
   golfRound = null;
   gymSession = null;
@@ -678,7 +679,7 @@ if (match.sport === "golf" || match.sport === "gym" || isClearMode()) {
 }
 
 function renderInProgressCards() {
-  let html = "";
+  let html = (currentView === "all" || currentView === "golf") ? pendingScorecardCardHtml() : "";
 
   const golfSaved = localStorage.getItem("inProgressGolfRound");
   if (golfSaved && (currentView === "all" || currentView === "golf")) {
