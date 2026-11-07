@@ -33,8 +33,6 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Gym
 
-- [ ] Timer
-- [ ] Review screen
 
 ## Social
 
@@ -58,6 +56,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Done recently
 
+- [x] Gym rest timer (one-tap 1:00/1:30/2:00/3:00, +15s, beep and vibrate, survives switching apps) and a review step before saving (title, totals incl. kg lifted, sets grouped by exercise, warnings for unfinished sets, back to sets).
 - [x] Logging and feed: + is a bigger labelled "Log" button that opens a panel over the feed (sports, tracked ones first, plus team games waiting to be logged) instead of a picker at the bottom of the page; your feed is grouped by month with "Show older".
 - [x] Likes, shown as 🍺 beers: beer button on Following cards with a count (tap again to take it back); your own cards show who sent one ("Harry, Priya and 1 other"). `likes` table: you can send a beer only for activities you can see and not your own.
 - [x] Golf handicap & Stableford: playing handicap per round (pre-filled from the last round or the scorecard; "+2" for plus handicaps), stroke index per hole read from the photo and saved per course, Stableford points live per hole, per nine and per round, stored with the round, on the detail page and in Insights (18-hole average and best).

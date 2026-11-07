@@ -190,7 +190,7 @@ function renderGymSets() {
   const groups = gymMuscleGroups(gymSession.sets);
 
   const measureFields = (set, index) => set.measure === "time" ? `
-      <div style="display:flex; gap:8px;">
+      <div class="set-numbers">
         <div class="field" style="flex:1;">
           <label class="label" for="set-duration-${index}">Time</label>
           <input type="text" inputmode="decimal" id="set-duration-${index}" value="${escapeHtml(formatDuration(set.duration))}" placeholder="mm:ss">
@@ -200,7 +200,7 @@ function renderGymSets() {
           <input type="number" inputmode="decimal" step="0.01" id="set-distance-${index}" value="${set.distance}">
         </div>
       </div>` : `
-      <div style="display:flex; gap:8px;">
+      <div class="set-numbers">
         <div class="field" style="flex:1;">
           <label class="label" for="set-weight-${index}">Weight</label>
           <input type="number" inputmode="decimal" id="set-weight-${index}" value="${set.weight}">
@@ -254,6 +254,7 @@ function renderGymSets() {
   `;
 
   const persist = () => { if (!gymSession.editingMatchId) saveSessionProgress(); };
+  showRestBar();
 
   document.getElementById("gym-session-name").addEventListener("change", (event) => {
     gymSession.name = event.target.value.trim();
@@ -339,6 +340,209 @@ function saveGymSetInputs() {
   });
 }
 
+// --- Rest timer ---------------------------------------------------------------
+// A bar pinned to the bottom of the sets screen. It lives outside the form
+// (which is rebuilt on every edit) and counts down from a fixed end time, so
+// re-renders and switching apps don't lose it.
+const REST_PRESETS = [60, 90, 120, 180];
+const rest = { endAt: null, duration: null, interval: null, doneTimer: null, audio: null };
+
+function restBarEl() {
+  let bar = document.getElementById("rest-timer");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "rest-timer";
+    bar.className = "rest-bar";
+    bar.setAttribute("role", "timer");
+    bar.hidden = true;
+    document.body.appendChild(bar);
+    bar.addEventListener("click", onRestBarClick);
+    document.addEventListener("visibilitychange", () => { if (rest.endAt) tickRest(); });
+  }
+  return bar;
+}
+
+function lastRestPreset() {
+  try { return Number(localStorage.getItem("gymRestSeconds")) || 90; } catch (e) { return 90; }
+}
+
+function showRestBar() {
+  const bar = restBarEl();
+  bar.hidden = false;
+  document.body.classList.add("rest-bar-on");
+  paintRest();
+}
+
+function hideRestBar() {
+  const bar = document.getElementById("rest-timer");
+  if (bar) bar.hidden = true;
+  document.body.classList.remove("rest-bar-on");
+}
+
+function paintRest(state) {
+  const bar = restBarEl();
+  if (state === "done") {
+    bar.dataset.state = "done";
+    bar.innerHTML = `
+      <span class="rest-bar__done">Rest over, go again</span>
+      <button type="button" class="chip" data-rest-start="${rest.duration}">Again</button>
+      <button type="button" class="chip" data-rest-dismiss>OK</button>`;
+    return;
+  }
+  if (rest.endAt) {
+    const left = Math.max(0, Math.ceil((rest.endAt - Date.now()) / 1000));
+    const pct = rest.duration ? Math.min(100, 100 * (1 - left / rest.duration)) : 0;
+    bar.dataset.state = "running";
+    bar.innerHTML = `
+      <span class="rest-bar__time num" aria-live="off">${formatDuration(left)}</span>
+      <span class="rest-bar__track" aria-hidden="true"><i style="width:${pct}%"></i></span>
+      <button type="button" class="chip" data-rest-add="15" aria-label="Add 15 seconds">+15s</button>
+      <button type="button" class="chip" data-rest-stop>Stop</button>`;
+    return;
+  }
+  const last = lastRestPreset();
+  bar.dataset.state = "idle";
+  bar.innerHTML = `
+    <span class="label">Rest</span>
+    <span class="rest-bar__presets">
+      ${REST_PRESETS.map(s => `<button type="button" class="chip" data-rest-start="${s}" aria-pressed="${s === last}" aria-label="Start a ${formatDuration(s)} rest">${formatDuration(s)}</button>`).join("")}
+    </span>`;
+}
+
+function startRest(seconds) {
+  clearTimeout(rest.doneTimer);
+  rest.duration = seconds;
+  rest.endAt = Date.now() + seconds * 1000;
+  try { localStorage.setItem("gymRestSeconds", String(seconds)); } catch (e) { /* fine */ }
+  // Sound needs to be unlocked by a tap, so prepare it now rather than at the end.
+  try {
+    rest.audio = rest.audio || new (window.AudioContext || window.webkitAudioContext)();
+    rest.audio.resume?.();
+  } catch (e) { rest.audio = null; }
+  clearInterval(rest.interval);
+  rest.interval = setInterval(tickRest, 250);
+  paintRest();
+}
+
+function stopRest() {
+  clearInterval(rest.interval);
+  rest.endAt = null;
+  paintRest();
+}
+
+function tickRest() {
+  if (!rest.endAt) return;
+  if (Date.now() >= rest.endAt) {
+    clearInterval(rest.interval);
+    rest.endAt = null;
+    restDone();
+    return;
+  }
+  const bar = document.getElementById("rest-timer");
+  if (!bar || bar.hidden) return;
+  const left = Math.max(0, Math.ceil((rest.endAt - Date.now()) / 1000));
+  const time = bar.querySelector(".rest-bar__time");
+  const fill = bar.querySelector(".rest-bar__track i");
+  if (time) time.textContent = formatDuration(left);
+  if (fill) fill.style.width = `${Math.min(100, 100 * (1 - left / rest.duration))}%`;
+}
+
+function restDone() {
+  paintRest("done");
+  // Buzz where the phone supports it (Android); beep everywhere else too.
+  try { navigator.vibrate?.([300, 120, 300]); } catch (e) { /* not supported */ }
+  try {
+    const ctx = rest.audio;
+    if (ctx && document.visibilityState === "visible") {
+      [0, 0.28].forEach(offset => {
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime + offset);
+        gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + offset + 0.2);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(ctx.currentTime + offset);
+        osc.stop(ctx.currentTime + offset + 0.22);
+      });
+    }
+  } catch (e) { /* sound is a nice-to-have */ }
+  rest.doneTimer = setTimeout(() => { if (!rest.endAt) paintRest(); }, 8000);
+}
+
+function onRestBarClick(event) {
+  const start = event.target.closest("[data-rest-start]");
+  if (start) { startRest(Number(start.dataset.restStart)); return; }
+  const add = event.target.closest("[data-rest-add]");
+  if (add && rest.endAt) {
+    rest.endAt += Number(add.dataset.restAdd) * 1000;
+    rest.duration += Number(add.dataset.restAdd);
+    tickRest();
+    return;
+  }
+  if (event.target.closest("[data-rest-stop]")) { stopRest(); return; }
+  if (event.target.closest("[data-rest-dismiss]")) { clearTimeout(rest.doneTimer); paintRest(); }
+}
+
+// --- Review ------------------------------------------------------------------
+
+// Exercises in the order first done, each with its sets, plus anything that
+// looks unfinished, for the review step before saving.
+function summariseGymSession(sets) {
+  const byExercise = [];
+  const problems = [];
+  sets.forEach((s, i) => {
+    const name = String(s.exercise || "").trim();
+    if (!name) problems.push({ i, text: `Set ${i + 1} has no exercise name` });
+    const empty = s.measure === "time" ? !s.duration && !s.distance : !s.reps;
+    if (empty) problems.push({ i, text: `Set ${i + 1}${name ? ` (${name})` : ""} has no ${s.measure === "time" ? "time or distance" : "reps"}` });
+    const key = name.toLowerCase() || `__unnamed${i}`;
+    let group = byExercise.find(g => g.key === key);
+    if (!group) { group = { key, name: name || "Unnamed", muscle: s.muscleGroup, sets: [] }; byExercise.push(group); }
+    group.sets.push(s);
+  });
+  const volume = sets.reduce((sum, s) => sum + (s.measure !== "time" ? (Number(s.weight) || 0) * (Number(s.reps) || 0) * (Number(s.rounds) || 1) : 0), 0);
+  const seconds = sets.reduce((sum, s) => sum + (s.measure === "time" ? Number(s.duration) || 0 : 0), 0);
+  const km = sets.reduce((sum, s) => sum + (s.measure === "time" ? Number(s.distance) || 0 : 0), 0);
+  return { byExercise, problems, volume, seconds, km };
+}
+
+function shortSetLabel(s) {
+  if (s.measure === "time") {
+    return [s.duration ? formatDuration(s.duration) : "", s.distance ? `${Number(s.distance).toLocaleString("en-GB", { maximumFractionDigits: 2 })} km` : ""].filter(Boolean).join(" · ") || "–";
+  }
+  const base = `${s.weight || 0}×${s.reps || "?"}`;
+  return s.rounds && s.rounds > 1 ? `${base} ×${s.rounds}` : base;
+}
+
+function gymReviewHtml() {
+  const sum = summariseGymSession(gymSession.sets);
+  return `
+    <p class="label">${gymSession.editingMatchId ? "Review changes" : "Review session"}</p>
+    <h2 class="review-title">${escapeHtml(gymSessionTitle(gymSession))}</h2>
+    <div class="stats" style="margin-top:12px;">
+      <div><span class="stat-value num">${gymSession.sets.length}</span><p class="label">Sets</p></div>
+      <div><span class="stat-value num">${sum.byExercise.length}</span><p class="label">Exercises</p></div>
+      ${sum.volume ? `<div><span class="stat-value num">${Math.round(sum.volume).toLocaleString("en-GB")}</span><p class="label">kg lifted</p></div>` : ""}
+      ${sum.seconds ? `<div><span class="stat-value num">${formatDuration(sum.seconds)}</span><p class="label">Time</p></div>` : ""}
+      ${sum.km ? `<div><span class="stat-value num">${sum.km.toLocaleString("en-GB", { maximumFractionDigits: 2 })}</span><p class="label">km</p></div>` : ""}
+    </div>
+    ${sum.problems.length ? `
+      <div class="review-warn" role="alert">
+        ${sum.problems.map(p => `<p>${escapeHtml(p.text)}</p>`).join("")}
+      </div>` : ""}
+    <div class="card review-list">
+      ${sum.byExercise.map(g => `
+        <div class="review-ex">
+          <div class="review-ex__head">
+            <span class="review-ex__name">${escapeHtml(g.name)}</span>
+            ${g.muscle ? `<span class="label">${escapeHtml(g.muscle)}</span>` : ""}
+          </div>
+          <div class="review-ex__sets">${g.sets.map(s => `<span class="set-pill num">${escapeHtml(shortSetLabel(s))}</span>`).join("")}</div>
+        </div>`).join("")}
+    </div>
+    <button type="button" id="gym-back-to-sets" class="btn btn--ghost btn--sm" style="margin:4px 0 8px;">← Back to sets</button>`;
+}
+
 // What gets written to gym_sets. A set stores only the fields for its measure,
 // so a set switched from reps to time doesn't keep stale weights.
 function gymSetRow(set, index, matchId) {
@@ -360,8 +564,10 @@ function gymSetRow(set, index, matchId) {
 
 function finishGymSession() {
   const existing = gymSession.editingMatchId ? matches.find(m => m.id === gymSession.editingMatchId) : null;
+  hideRestBar();
 
   form.innerHTML = `
+    ${gymReviewHtml()}
     <div class="field">
       <label class="label" for="gym-date">Date</label>
       <input type="date" id="gym-date" value="${existing ? existing.date : todayISODate()}" required>
@@ -376,6 +582,8 @@ function finishGymSession() {
     </div>
     <button type="button" id="gym-save-btn" class="btn">${existing ? "Save Changes" : "Save Session"}</button>
   `;
+
+  document.getElementById("gym-back-to-sets").addEventListener("click", renderGymSets);
 
   document.getElementById("gym-save-btn").addEventListener("click", async () => {
     const userId = await ensureSignedIn();
