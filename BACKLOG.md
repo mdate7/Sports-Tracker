@@ -27,7 +27,6 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 ## Golf
 
 - [ ] Multi-person scores and match play: record a match alongside the individual score, in four-ball, foursomes, scramble, three-ball and two-ball formats.
-- [ ] Scorecard upload loading screen, with the option to leave and come back later to review the read card.
 - [ ] Course retrieval
 - [ ] Hole length and tee colour
 
@@ -56,6 +55,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Done recently
 
+- [x] Scorecard photo loading screen: your photo, a spinner, what it's reading and a seconds counter, plus "Keep using the app". The read carries on in the background and waits at the top of your feed ("Scorecard ready to review" → Review / Dismiss). A failed read says so on the setup screen instead of a pop-up; if the app was closed mid-read the card says so with Try again.
 - [x] Gym rest timer (one-tap 1:00/1:30/2:00/3:00, +15s, beep and vibrate, survives switching apps) and a review step before saving (title, totals incl. kg lifted, sets grouped by exercise, warnings for unfinished sets, back to sets).
 - [x] Logging and feed: + is a bigger labelled "Log" button that opens a panel over the feed (sports, tracked ones first, plus team games waiting to be logged) instead of a picker at the bottom of the page; your feed is grouped by month with "Show older".
 - [x] Likes, shown as 🍺 beers: beer button on Following cards with a count (tap again to take it back); your own cards show who sent one ("Harry, Priya and 1 other"). `likes` table: you can send a beer only for activities you can see and not your own.

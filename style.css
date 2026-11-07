@@ -727,3 +727,63 @@ body.rest-bar-on #match-form { padding-bottom: 96px; }
 .set-numbers .field { flex: 1 1 0; min-width: 0; }
 [data-size="clear"] .set-numbers { flex-wrap: wrap; }
 [data-size="clear"] .set-numbers .field { flex: 1 1 40% !important; } /* beats the inline flex:1 */
+
+/* --- Scorecard reading: loading screen and the feed card ------------------ */
+.sc-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--s-2);
+  padding: var(--s-6) var(--s-4);
+}
+.sc-loading__photo {
+  width: 120px;
+  max-height: 160px;
+  object-fit: cover;
+  border-radius: var(--r-field);
+  border: 1px solid var(--line);
+  margin-bottom: var(--s-2);
+}
+.sc-loading__spinner {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid color-mix(in oklab, var(--text) 16%, transparent);
+  border-top-color: var(--sport, var(--text));
+  animation: sc-spin 0.9s linear infinite;
+}
+@keyframes sc-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .sc-loading__spinner { animation-duration: 3s; } }
+.sc-loading__title { font: var(--t-card); color: var(--text); margin: 0; }
+.sc-loading__step { color: var(--text); margin: 0; min-height: 1.4em; }
+.sc-loading__time { color: var(--muted); margin: 0; font: var(--t-body); }
+.sc-loading__note { color: var(--muted); margin: var(--s-2) 0; max-width: 32ch; font: var(--t-body); }
+.sc-note {
+  color: var(--text);
+  background: color-mix(in oklab, var(--text) 8%, transparent);
+  border-radius: var(--r-field);
+  padding: var(--s-3);
+  margin: 0 0 var(--s-3);
+}
+.sc-pending__row { display: flex; align-items: center; gap: var(--s-3); }
+.sc-pending__thumb {
+  width: 48px;
+  height: 48px;
+  flex: none;
+  object-fit: cover;
+  border-radius: var(--r-badge);
+  border: 1px solid var(--line);
+}
+.sc-pending__thumb--empty {
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklab, var(--text) 8%, transparent);
+}
+.sc-pending__main { min-width: 0; }
+.sc-pending__main .eyebrow { margin: 0; color: var(--sport, var(--text)); }
+.sc-pending__main .card-meta { margin: 2px 0 0; overflow-wrap: anywhere; }
+.sc-pending__actions { display: flex; gap: var(--s-2); margin-top: var(--s-3); flex-wrap: wrap; }
+[data-size="clear"] .sc-loading__note,
+[data-size="clear"] .sc-loading__time { font-size: inherit; }
+[data-size="clear"] .sc-pending__thumb { width: 56px; height: 56px; }
