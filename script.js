@@ -303,22 +303,6 @@ function openSportForm(sport) {
 }
 
 
-function buildSportPicker() {
-  form.innerHTML = `
-    <p style="font-size:13px;color:var(--muted);">Which sport?</p>
-    <button type="button" class="btn" data-pick-sport="football">⚽ Football</button>
-    <button type="button" class="btn btn--ghost" data-pick-sport="cricket">🏏 Cricket</button>
-    <button type="button" class="btn btn--ghost" data-pick-sport="golf">⛳ Golf</button>
-    <button type="button" class="btn btn--ghost" data-pick-sport="gym">🏋️ Gym</button>
-  `;
-  form.querySelectorAll("[data-pick-sport]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      setView(btn.dataset.pickSport);
-      openSportForm(currentView);
-    });
-  });
-}
-
 function buildDetailPayload(sport, values) {
   if (sport === "football") {
     return {
@@ -759,17 +743,62 @@ function renderList(list) {
     }
     return;
   }
-  // One malformed row (e.g. a match whose detail row never saved) used to throw
-  // here and silently stop every older match from rendering. Skip just that one.
-  sorted.forEach((match) => {
-    try {
-      renderMatch(match);
-    } catch (err) {
-      console.error("Skipped a match that failed to render:", match, err);
-    }
+  // Grouped by month, newest first. Only the first few months are drawn;
+  // "Show older" adds more, so a long history isn't one endless scroll.
+  const groups = [];
+  sorted.forEach(m => {
+    const key = (m.date || "").slice(0, 7) || "undated";
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.items.push(m);
+    else groups.push({ key, items: [m] });
   });
+  const visibleKey = `${currentView}`;
+  if (feedMonthsShown.view !== visibleKey) feedMonthsShown = { view: visibleKey, count: FEED_MONTHS_STEP };
+  // Always show at least ~10 activities, even if the latest months are quiet.
+  let shown = 0, cards = 0;
+  while (shown < groups.length && (shown < feedMonthsShown.count || cards < 10)) cards += groups[shown++].items.length;
+
+  groups.slice(0, shown).forEach(group => {
+    const head = document.createElement("p");
+    head.className = "month-head";
+    head.innerHTML = `${group.key === "undated" ? "No date" : monthHeading(group.key)} <span class="num">${group.items.length}</span>`;
+    matchList.appendChild(head);
+    // One malformed row (e.g. a match whose detail row never saved) used to throw
+    // here and silently stop every older match from rendering. Skip just that one.
+    group.items.forEach((match) => {
+      try {
+        renderMatch(match);
+      } catch (err) {
+        console.error("Skipped a match that failed to render:", match, err);
+      }
+    });
+  });
+
+  if (shown < groups.length) {
+    const remaining = groups.slice(shown).reduce((s, g) => s + g.items.length, 0);
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "btn btn--ghost show-older";
+    more.textContent = `Show older · ${remaining} more`;
+    more.addEventListener("click", () => {
+      feedMonthsShown.count = shown + FEED_MONTHS_STEP;
+      const y = window.scrollY;
+      renderView();
+      window.scrollTo(0, y); // stay where you were; the older months appear below
+    });
+    matchList.appendChild(more);
+  }
   // Beers from followers arrive separately and are painted onto the cards.
   refreshOwnLikes();
+}
+
+const FEED_MONTHS_STEP = 3;
+let feedMonthsShown = { view: null, count: FEED_MONTHS_STEP };
+
+function monthHeading(key) {
+  const d = new Date(key + "-01T00:00");
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString("en-GB", { month: "long", ...(sameYear ? {} : { year: "numeric" }) });
 }
 
 function renderMatchDetailScreen() {
@@ -933,16 +962,84 @@ matchList.addEventListener("click", (event) => {
   resumeInProgress(resumeCard.dataset.resume);
 });
 
-matchList.addEventListener("click", (event) => {
-  const logCard = event.target.closest("[data-log-selection]");
-  if (!logCard) return;
-  const selection = pendingSelections.find(s => s.id === logCard.dataset.logSelection);
+function logPendingSelection(id) {
+  const selection = pendingSelections.find(s => s.id === id);
   if (!selection) return;
   activeSelectionId = selection.id;
   if (currentMode !== "feed") setMode("feed");
   setView("football");
   buildFootballForm(null, selection.team_sheets.fixtures);
   form.style.display = "flex";
+}
+
+matchList.addEventListener("click", (event) => {
+  const logCard = event.target.closest("[data-log-selection]");
+  if (logCard) logPendingSelection(logCard.dataset.logSelection);
+});
+
+// --- Log panel -------------------------------------------------------------
+// "+" used to drop a sport picker underneath the whole feed, so on a long feed
+// you had to scroll to the bottom to find it. It now slides up over the feed.
+const logSheet = document.getElementById("log-sheet");
+let logSheetReturnFocus = null;
+
+function openLogSheet() {
+  const tracked = userProfile?.sports_tracked || [];
+  const sports = [
+    { id: "football", icon: "⚽", name: "Football" },
+    { id: "golf", icon: "⛳", name: "Golf" },
+    { id: "gym", icon: "🏋️", name: "Gym" },
+    { id: "cricket", icon: "🏏", name: "Cricket" }
+  ].sort((a, b) => (tracked.includes(b.id) ? 1 : 0) - (tracked.includes(a.id) ? 1 : 0));
+
+  const pending = pendingSelections.map(sel => {
+    const f = sel.team_sheets.fixtures;
+    return `
+      <button type="button" class="sheet-row" data-sheet-selection="${sel.id}">
+        <span class="sheet-row__icon" aria-hidden="true">⚽</span>
+        <span class="sheet-row__main"><span class="sheet-row__title">vs ${escapeHtml(f.opponent || "Unknown")} (${f.is_home ? "H" : "A"})</span>
+        <span class="label">${f.date ? formatFixtureDate(f.date) : ""}</span></span>
+        <span class="chip" aria-hidden="true">Log</span>
+      </button>`;
+  }).join("");
+
+  logSheet.querySelector(".sheet__body").innerHTML = `
+    ${pending ? `<p class="label">Waiting to be logged</p><div class="sheet-list">${pending}</div>` : ""}
+    <p class="label" ${pending ? 'style="margin-top:18px;"' : ""}>What did you play?</p>
+    <div class="sheet-sports">
+      ${sports.map(s => `<button type="button" class="sheet-sport" data-sheet-sport="${s.id}" data-sport="${s.id}">
+        <span aria-hidden="true">${s.icon}</span>${s.name}</button>`).join("")}
+    </div>`;
+  logSheetReturnFocus = document.activeElement;
+  logSheet.hidden = false;
+  requestAnimationFrame(() => logSheet.classList.add("is-open"));
+  logSheet.querySelector(".sheet-sport, .sheet-row")?.focus();
+}
+
+function closeLogSheet() {
+  if (logSheet.hidden) return;
+  logSheet.classList.remove("is-open");
+  logSheet.hidden = true;
+  logSheetReturnFocus?.focus?.();
+}
+
+logSheet.addEventListener("click", (event) => {
+  if (event.target.closest("[data-close-sheet]")) { closeLogSheet(); return; }
+  const sport = event.target.closest("[data-sheet-sport]");
+  if (sport) {
+    closeLogSheet();
+    setView(sport.dataset.sheetSport);
+    openSportForm(sport.dataset.sheetSport);
+    return;
+  }
+  const sel = event.target.closest("[data-sheet-selection]");
+  if (sel) {
+    closeLogSheet();
+    logPendingSelection(sel.dataset.sheetSelection);
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !logSheet.hidden) closeLogSheet();
 });
 
 function startEdit(id) {
@@ -1021,8 +1118,7 @@ if (isOpen) {
   if (feedScope !== "mine") setFeedScope("mine");
 
   if (currentView === "all") {
-    buildSportPicker();
-    form.style.display = "flex";
+    openLogSheet();
   } else {
     openSportForm(currentView);
   }

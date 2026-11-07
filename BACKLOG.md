@@ -38,7 +38,6 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Social
 
-- [ ] The feed is getting long: filter by month, or load more as you scroll.
 - [ ] Sport grouping
 
 ## Stats and insights
@@ -52,7 +51,6 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## General
 
-- [ ] Easier "start an activity" button: today you scroll to the bottom; it should pop out and be more prominent.
 - [ ] Field validation
 - [ ] Entering data on behalf of others
 - [ ] Voice notes
@@ -60,6 +58,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Done recently
 
+- [x] Logging and feed: + is a bigger labelled "Log" button that opens a panel over the feed (sports, tracked ones first, plus team games waiting to be logged) instead of a picker at the bottom of the page; your feed is grouped by month with "Show older".
 - [x] Likes, shown as 🍺 beers: beer button on Following cards with a count (tap again to take it back); your own cards show who sent one ("Harry, Priya and 1 other"). `likes` table: you can send a beer only for activities you can see and not your own.
 - [x] Golf handicap & Stableford: playing handicap per round (pre-filled from the last round or the scorecard; "+2" for plus handicaps), stroke index per hole read from the photo and saved per course, Stableford points live per hole, per nine and per round, stored with the round, on the detail page and in Insights (18-hole average and best).
 - [x] Bigger & clearer mode, labelled "OAP" (Me → Appearance: Off / On / Match phone, default Match phone): larger type, spacing and tap targets, stronger contrast, sentence-case labels; feed cards cut to what/when/result with Open → detail page; Insights one stat per row with charts folded. Detail page now has Edit and Delete for every sport. Stat rows wrap (football cards used to run off the edge).
