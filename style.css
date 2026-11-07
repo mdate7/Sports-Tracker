@@ -605,3 +605,75 @@
 .sc-input--si { color: var(--muted); font-weight: 400; }
 .sc-note { margin: 0 0 var(--s-3); font: var(--t-body); color: var(--muted); }
 .finish-points { text-align: center; margin: 6px 0 0; font: var(--t-value); color: var(--text); min-height: 1.2em; }
+
+/* --- Log button: bigger, labelled, the obvious main action --- */
+.tabs .log {
+  width: 64px; height: 64px; margin-top: -26px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+  border: 0; border-radius: 50%; cursor: pointer;
+  background: var(--football); color: var(--on-accent);
+  /* ring in the page colour lifts it off the bar */
+  box-shadow: 0 0 0 5px var(--bg), 0 6px 18px color-mix(in oklab, black 35%, transparent);
+}
+.tabs .log .log__plus { font: 400 1.75rem/1 var(--font-ui); margin-top: -2px; }
+.tabs .log .log__label { font: 700 .625rem/1 var(--font-ui); letter-spacing: .04em; text-transform: uppercase; }
+.tabs .log:active { transform: scale(.95); }
+[data-size="clear"] .tabs .log { width: 72px; height: 72px; margin-top: -30px; }
+[data-size="clear"] .tabs .log .log__label { font-size: .75rem; text-transform: none; }
+
+/* --- Log panel: slides up over the feed --- */
+.sheet { position: fixed; inset: 0; z-index: 40; }
+.sheet__backdrop {
+  position: absolute; inset: 0;
+  background: color-mix(in oklab, black 55%, transparent);
+  opacity: 0; transition: opacity var(--dur) var(--ease);
+}
+.sheet__panel {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  max-width: var(--app-max); margin-inline: auto;
+  max-height: 85vh; overflow-y: auto;
+  padding: var(--s-4) var(--gutter) calc(var(--s-5) + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border: 1px solid var(--line-strong); border-bottom: 0;
+  border-radius: 20px 20px 0 0;
+  transform: translateY(100%); transition: transform 220ms var(--ease);
+}
+.sheet.is-open .sheet__backdrop { opacity: 1; }
+.sheet.is-open .sheet__panel { transform: none; }
+@media (prefers-reduced-motion: reduce) { .sheet__panel, .sheet__backdrop { transition: none; } }
+.sheet__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s-3); }
+.sheet__head { gap: var(--s-3); }
+.sheet__head .btn { width: auto; flex: none; min-width: 0; padding-inline: 16px; }
+.sheet__title { font: var(--t-card); margin: 0; }
+.sheet-sports { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); margin-top: var(--s-2); }
+.sheet-sport {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  min-height: 96px; border-radius: var(--r-card); cursor: pointer;
+  background: var(--raised); border: 1px solid var(--line-strong); color: var(--text);
+  font: var(--t-value);
+}
+.sheet-sport span { font-size: 1.75rem; line-height: 1; }
+.sheet-sport:active, .sheet-sport:focus-visible { border-color: var(--sport); outline: none; }
+.sheet-list { margin-top: var(--s-2); }
+.sheet-row {
+  display: flex; align-items: center; gap: var(--s-3); width: 100%;
+  min-height: var(--tap-min); padding: var(--s-2) 0; cursor: pointer;
+  background: none; border: 0; border-top: 1px solid var(--line); color: var(--text); text-align: left;
+}
+.sheet-row:first-child { border-top: 0; }
+.sheet-row__icon { font-size: 1.25rem; }
+.sheet-row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sheet-row__title { font: var(--t-value); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-size="clear"] .sheet-sports { grid-template-columns: 1fr; }
+[data-size="clear"] .sheet-sport { flex-direction: row; min-height: 72px; font: var(--t-card); gap: 14px; }
+
+/* --- Feed month headings --- */
+.month-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin: var(--s-3) 2px 0; font: var(--t-label); letter-spacing: var(--track-label);
+  text-transform: uppercase; color: var(--muted);
+}
+.month-head:first-child, #match-list > .card + .month-head:first-of-type { margin-top: 0; }
+.month-head .num { color: var(--faint); }
+.show-older { margin-top: var(--s-2); }
+[data-size="clear"] .month-head { font: var(--t-card); text-transform: none; color: var(--text); }
