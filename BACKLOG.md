@@ -21,8 +21,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 - [ ] Form tracking
 - [ ] League table
 - [ ] Team selection and formations
-- [ ] Team sheet picker: show the 15 most-picked players by default, with everyone else behind a search ("Other squad players") so they're clearly not new. Keep "Add a new player" as its own, separate button. *No DB step: counts come from `team_sheet_selections` / `fixture_appearances`.*
-- [ ] Goal-and-assist partnerships: "who sets up whom" stats (top pairs, per player and per season) on the team view. *Check first whether result entry already stores each goal with its assister as one event; if it does, no DB step.*
+- [ ] Goal-and-assist partnerships: "who sets up whom" stats (top pairs, per player and per season) on the team view. *DB step: result entry only saves per-player goal and assist totals, so which assist went with which goal is lost. Needs a `fixture_goals` table (fixture, scorer, assister, order) with team-member RLS. Only games entered after that will have the links.*
 - [ ] Comms
 - [ ] Fill in opponents for the first-season backfilled games, if anyone remembers them.
 
@@ -69,6 +68,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Done recently
 
+- [x] Squad picker (team sheet and "Who played?" on results): the 15 players with the most appearances in the last year are shown first, plus anyone already picked. Everyone else is under "Other squad players (N)" with a search, and picking one moves them up. "+ New player" is a separate step, and it checks the name against the squad first, so typing an existing player's name picks them instead of creating a duplicate.
 - [x] Gym workout timer (⏱ Timer on the sets screen), alongside the rest bar: **Intervals** (work/rest seconds × rounds, optional exercise list where a round is once through the list), **AMRAP** (countdown with a big tap-for-+1-round button) and **Stopwatch** (holds). 5s get-ready, beeps and buzzes on every switch, pause, survives locking the phone. When it ends the work is added as time sets (total time + rounds, e.g. Plank 3:00 · 4 rounds), editable before saving. Time sets now have a Rounds field too.
 - [x] Scorecard photo loading screen: your photo, a spinner, what it's reading and a seconds counter, plus "Keep using the app". The read carries on in the background and waits at the top of your feed ("Scorecard ready to review" → Review / Dismiss). A failed read says so on the setup screen instead of a pop-up; if the app was closed mid-read the card says so with Try again.
 - [x] Gym rest timer (one-tap 1:00/1:30/2:00/3:00, +15s, beep and vibrate, survives switching apps) and a review step before saving (title, totals incl. kg lifted, sets grouped by exercise, warnings for unfinished sets, back to sets).
