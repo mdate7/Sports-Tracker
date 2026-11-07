@@ -21,17 +21,25 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 - [ ] Form tracking
 - [ ] League table
 - [ ] Team selection and formations
+- [ ] Team sheet picker: show the 15 most-picked players by default, with everyone else behind a search ("Other squad players") so they're clearly not new. Keep "Add a new player" as its own, separate button. *No DB step: counts come from `team_sheet_selections` / `fixture_appearances`.*
+- [ ] Goal-and-assist partnerships: "who sets up whom" stats (top pairs, per player and per season) on the team view. *Check first whether result entry already stores each goal with its assister as one event; if it does, no DB step.*
 - [ ] Comms
 - [ ] Fill in opponents for the first-season backfilled games, if anyone remembers them.
 
 ## Golf
 
 - [ ] Multi-person scores and match play: record a match alongside the individual score, in four-ball, foursomes, scramble, three-ball and two-ball formats.
-- [ ] Course retrieval
-- [ ] Hole length and tee colour
+- [ ] **Course search up front:** find the course before the round and fill in par and stroke index per hole, so nothing is typed by hand. Pick the tee colour, which sets the yardages, and SI where it differs by tee. *Needs a course data source (a golf course API, or build up our own `courses` table from scorecard photos), plus tee columns: DB step.* Replaces "Course retrieval" and "Hole length and tee colour".
+- [ ] **Practice sessions:** a new golf session type. Free practice (total balls) or planned (balls per club), plus a name or focus ("Wedges inside 100"), a rating and notes. *New tables: DB step.*
+- [ ] **Club distance tracker:** record carry distances per club during a practice session to get an average for each club. Re-test every few months and chart the progress per club. Builds on practice sessions.
+- [ ] **Distance to the pin (GPS):** live yards to the green as you play, from the phone's location. *Trickier: needs green coordinates per hole (from a course data source, or tapped in once on a map and saved per course), the screen kept on, and battery care. Works in a web app over HTTPS.* Builds on course search.
 
 ## Gym
 
+
+## New sports
+
+- [ ] **Squash:** a new sport (filter chip, log form, feed card, detail page, Insights, chart colour). Likely fields: opponent, games won and lost (e.g. 3–1), points per game, venue, rating, notes. *New details table with follower select policy: DB step. Needs a validated `--chart-squash` colour.*
 
 ## Social
 
@@ -40,11 +48,17 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 ## Stats and insights
 
 - [ ] "Year in sport": Spotify Wrapped-style screens.
+- [ ] Date filters on Insights: this month, last 3 months, season (Aug–Jul), this year, all time, custom.
+- [ ] Personalise Insights: pick which cards to show and in what order, from a list. *Saved per device at first; to follow you across devices it needs a `profiles` column, which is a DB step.*
 
 ## Profile
 
 - [ ] Sport-specific user attributes
 - [ ] Delete or cancel matches waiting to be logged on your profile.
+
+## Integrations
+
+- [ ] **Garmin:** pull in data from Garmin Connect. Ideas so far: auto-import gym and cardio activities; heart rate and calories on sessions; steps and distance walked on golf rounds; the Garmin scorecard and shot tracking for golf; training load or body battery in Insights. *Two routes: the official Garmin Connect Developer Program (needs an approved developer account and an Edge Function for OAuth and webhooks), or a Garmin MCP connector so Claude can read your data on request. To decide first: which of these you actually want.*
 
 ## General
 
