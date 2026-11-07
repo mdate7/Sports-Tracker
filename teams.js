@@ -573,6 +573,187 @@ function renderJoinTeamForm() {
   });
 }
 
+// ── Squad picker (team sheet and "who played?") ─────────────────────────
+//
+// A squad builds up years of one-off and long-gone players (the WhatsApp
+// backfill alone added dozens), so a flat list of everyone is mostly noise.
+// The picker shows the regulars first: the SQUAD_SHORTLIST players with the
+// most appearances in the last year (all-time as the tie-break), plus anyone
+// already picked. Everyone else sits under "Other squad players" with a
+// search, so it's clear they're existing players, not new ones. Adding a new
+// player is a separate, explicit step, and it checks the name against the
+// squad first so the same person doesn't end up in `players` twice.
+const SQUAD_SHORTLIST = 15;
+const SQUAD_RECENT_DAYS = 365;
+
+// playerId -> { recent, total } appearance counts for this team.
+async function loadSquadUsage(teamId) {
+  const usage = new Map();
+  try {
+    const { data: fixtures, error } = await supabaseClient.from("fixtures").select("id, date").eq("team_id", teamId);
+    if (error) throw error;
+    const dateById = new Map((fixtures || []).map(f => [f.id, f.date]));
+    if (!dateById.size) return usage;
+    const { data: apps, error: appsError } = await supabaseClient
+      .from("fixture_appearances").select("player_id, fixture_id").in("fixture_id", [...dateById.keys()]);
+    if (appsError) throw appsError;
+    const cutoff = new Date(Date.now() - SQUAD_RECENT_DAYS * 86400000).toISOString().slice(0, 10);
+    (apps || []).forEach(a => {
+      const u = usage.get(a.player_id) || { recent: 0, total: 0 };
+      u.total++;
+      if ((dateById.get(a.fixture_id) || "") >= cutoff) u.recent++;
+      usage.set(a.player_id, u);
+    });
+  } catch (err) {
+    // Without counts the picker still works: it just falls back to members
+    // first, then A–Z.
+    console.error("Failed to load squad usage:", err);
+  }
+  return usage;
+}
+
+function normalisePlayerName(name) {
+  return String(name || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+// squad: [{ playerId, userId, name, ... }]; `pickedKey` is the boolean field
+// that means "picked" on those objects ("isIn" on the sheet, "inSquad" on a
+// result). makeEntry(newPlayerRow) builds a squad entry for a new player.
+// The container is re-created whenever its screen re-renders, so the
+// listeners below are attached once per container.
+function mountSquadPicker({ el, team, squad, pickedKey, usage, makeEntry, onChange }) {
+  const rankOf = (p) => {
+    const u = usage.get(p.playerId) || { recent: 0, total: 0 };
+    return [u.recent, u.total, p.userId ? 1 : 0];
+  };
+  const byRank = (a, b) => {
+    const ra = rankOf(a), rb = rankOf(b);
+    for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return rb[i] - ra[i];
+    return a.name.localeCompare(b.name);
+  };
+  const ranked = [...squad].sort(byRank);
+  // Shortlisted for this visit; doesn't change as people are ticked, so
+  // chips don't jump about. Picking someone from "Other" promotes them.
+  const shortlist = new Set(ranked.slice(0, SQUAD_SHORTLIST).map(p => p.playerId));
+  squad.forEach(p => { if (p[pickedKey]) shortlist.add(p.playerId); });
+
+  el.innerHTML = `
+    <p class="label squad-picker__count" data-squad-count></p>
+    <div class="chips squad-picker__main" data-squad-main></div>
+    <details class="squad-picker__others" data-squad-others-wrap>
+      <summary data-squad-others-summary></summary>
+      <div class="field squad-picker__search">
+        <label class="label" for="${el.id}-search">Search the squad</label>
+        <input type="search" id="${el.id}-search" data-squad-search placeholder="Name" autocomplete="off">
+      </div>
+      <div class="chips" data-squad-others></div>
+      <p class="tiny squad-picker__empty" data-squad-none hidden>No one in the squad matches. If they've never played for ${escapeHtml(team.name)}, add them as a new player below.</p>
+    </details>
+    <div class="squad-picker__new">
+      <button type="button" class="btn btn--ghost btn--sm" data-squad-new-open>+ New player</button>
+      <div data-squad-new hidden>
+        <div class="field">
+          <label class="label" for="${el.id}-new">New player's name</label>
+          <input type="text" id="${el.id}-new" data-squad-new-input maxlength="40" autocomplete="off" placeholder="Someone who's never played for us">
+        </div>
+        <div class="squad-picker__new-actions">
+          <button type="button" class="btn btn--sm" data-squad-new-add>Add to squad</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-squad-new-cancel>Cancel</button>
+        </div>
+      </div>
+      <p class="tiny squad-picker__msg" data-squad-msg role="status"></p>
+    </div>`;
+
+  const q = (sel) => el.querySelector(sel);
+  const chip = (p) => `<button type="button" class="chip" data-squad-pick="${p.playerId}" aria-pressed="${!!p[pickedKey]}">${escapeHtml(p.name)}</button>`;
+
+  function paint() {
+    const main = ranked.filter(p => shortlist.has(p.playerId));
+    const others = ranked.filter(p => !shortlist.has(p.playerId)).sort((a, b) => a.name.localeCompare(b.name));
+    const term = normalisePlayerName(q("[data-squad-search]").value);
+    const shown = term ? others.filter(p => normalisePlayerName(p.name).includes(term)) : others;
+    q("[data-squad-main]").innerHTML = main.map(chip).join("");
+    q("[data-squad-others]").innerHTML = shown.map(chip).join("");
+    q("[data-squad-none]").hidden = !(term && !shown.length);
+    q("[data-squad-others-wrap]").hidden = !others.length;
+    q("[data-squad-others-summary]").textContent = `Other squad players (${others.length})`;
+    const picked = squad.filter(p => p[pickedKey]).length;
+    q("[data-squad-count]").textContent = `Picked: ${picked}`;
+    onChange?.(picked);
+  }
+
+  function say(text) { q("[data-squad-msg]").textContent = text; }
+
+  el.addEventListener("click", async (event) => {
+    const pick = event.target.closest("[data-squad-pick]");
+    if (pick) {
+      const p = squad.find(x => x.playerId === pick.dataset.squadPick);
+      if (!p) return;
+      p[pickedKey] = !p[pickedKey];
+      if (p[pickedKey] && !shortlist.has(p.playerId)) {
+        shortlist.add(p.playerId); // moves up into the main list
+        say(`${p.name} added to the picks.`);
+      }
+      paint();
+      return;
+    }
+    if (event.target.closest("[data-squad-new-open]")) {
+      q("[data-squad-new]").hidden = false;
+      q("[data-squad-new-open]").hidden = true;
+      q("[data-squad-new-input]").focus();
+      return;
+    }
+    if (event.target.closest("[data-squad-new-cancel]")) {
+      q("[data-squad-new]").hidden = true;
+      q("[data-squad-new-open]").hidden = false;
+      q("[data-squad-new-input]").value = "";
+      return;
+    }
+    const addBtn = event.target.closest("[data-squad-new-add]");
+    if (addBtn) {
+      const input = q("[data-squad-new-input]");
+      const name = input.value.trim().replace(/\s+/g, " ");
+      if (!name) { input.focus(); return; }
+      const existing = squad.find(p => normalisePlayerName(p.name) === normalisePlayerName(name));
+      if (existing) {
+        existing[pickedKey] = true;
+        shortlist.add(existing.playerId);
+        input.value = "";
+        say(`${existing.name} is already in the squad, so they've been picked rather than added again.`);
+        paint();
+        return;
+      }
+      addBtn.disabled = true;
+      const { data: newPlayer, error } = await supabaseClient
+        .from("players")
+        .insert({ team_id: team.id, display_name: name })
+        .select()
+        .single();
+      addBtn.disabled = false;
+      if (error) { console.error("Failed to add player:", error); say("Couldn't add that player. Try again."); return; }
+      const entry = makeEntry(newPlayer);
+      entry[pickedKey] = true;
+      squad.push(entry);
+      ranked.push(entry);
+      shortlist.add(entry.playerId);
+      input.value = "";
+      say(`${newPlayer.display_name} added to the squad and picked.`);
+      paint();
+    }
+  });
+  el.addEventListener("input", (event) => {
+    if (event.target.matches("[data-squad-search]")) paint();
+  });
+  el.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && event.target.matches("[data-squad-new-input]")) {
+      event.preventDefault();
+      q("[data-squad-new-add]").click();
+    }
+  });
+
+  paint();
+}
+
 async function loadOrCreateTeamSheet(fixtureId) {
   const { data: existing } = await supabaseClient
     .from("team_sheets")
@@ -597,9 +778,10 @@ async function renderTeamSheetScreen(fixture, team) {
   const sheet = await loadOrCreateTeamSheet(fixture.id);
   if (!sheet) return;
 
-  const [players, { data: selections }] = await Promise.all([
+  const [players, { data: selections }, usage] = await Promise.all([
     ensurePlayersForTeam(team.id, team.members),
-    supabaseClient.from("team_sheet_selections").select("*").eq("team_sheet_id", sheet.id)
+    supabaseClient.from("team_sheet_selections").select("*").eq("team_sheet_id", sheet.id),
+    loadSquadUsage(team.id)
   ]);
 
   const selectionByUser = new Map();
@@ -616,25 +798,6 @@ async function renderTeamSheetScreen(fixture, team) {
     isIn: p.user_id ? !!selectionByUser.get(p.user_id) : !!selectionByPlayer.get(p.id)
   }));
 
-  function squadRowHtml(p) {
-    return `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);">
-        <span>${escapeHtml(p.name)}</span>
-        <button type="button" class="chip" data-player-id="${p.playerId}" aria-pressed="${p.isIn}">
-          ${p.isIn ? "In" : "Out"}
-        </button>
-      </div>
-    `;
-  }
-
-  function wireToggle(btn) {
-    btn.addEventListener("click", () => {
-      const isIn = btn.getAttribute("aria-pressed") === "true";
-      btn.setAttribute("aria-pressed", isIn ? "false" : "true");
-      btn.textContent = isIn ? "Out" : "In";
-    });
-  }
-
   matchList.innerHTML = `
     <div class="card" data-sport="${team.sport}">
       <p class="stat-value">${escapeHtml(fixture.opponent)} (${fixture.is_home ? "H" : "A"})</p>
@@ -642,12 +805,7 @@ async function renderTeamSheetScreen(fixture, team) {
     </div>
 
     <p class="label" style="margin-top:16px;">Squad</p>
-    <div class="card" id="sheet-squad-list">${squad.map(squadRowHtml).join("")}</div>
-
-    <div class="field" style="display:flex;gap:8px;margin-top:12px;">
-      <input type="text" id="sheet-add-player-input" placeholder="Add a player not on the team">
-      <button type="button" id="sheet-add-player-btn" class="btn btn--ghost btn--sm">Add</button>
-    </div>
+    <div class="card squad-picker" id="sheet-squad-picker"></div>
 
     <button type="button" id="sheet-save-draft-btn" class="btn btn--ghost" style="margin-top:16px;">Save draft</button>
     <button type="button" id="sheet-publish-btn" class="btn" style="margin-top:10px;">Publish</button>
@@ -655,24 +813,11 @@ async function renderTeamSheetScreen(fixture, team) {
     <p id="sheet-status" class="tiny" style="color:var(--muted);margin-top:10px;"></p>
   `;
 
-  document.querySelectorAll("[data-player-id]").forEach(wireToggle);
-
-  document.getElementById("sheet-add-player-btn").addEventListener("click", async () => {
-    const input = document.getElementById("sheet-add-player-input");
-    const name = input.value.trim();
-    if (!name) return;
-
-    const { data: newPlayer, error } = await supabaseClient
-      .from("players")
-      .insert({ team_id: team.id, display_name: name })
-      .select()
-      .single();
-    if (error) { console.error("Failed to add player:", error); return; }
-
-    squad.push({ playerId: newPlayer.id, userId: null, name: newPlayer.display_name, isIn: true });
-    document.getElementById("sheet-squad-list").insertAdjacentHTML("beforeend", squadRowHtml(squad[squad.length - 1]));
-    wireToggle(document.querySelector(`[data-player-id="${newPlayer.id}"]`));
-    input.value = "";
+  mountSquadPicker({
+    el: document.getElementById("sheet-squad-picker"),
+    team, squad, usage,
+    pickedKey: "isIn",
+    makeEntry: (row) => ({ playerId: row.id, userId: null, name: row.display_name, isIn: true })
   });
 
   document.getElementById("sheet-back-btn").addEventListener("click", () => renderTeamDetail());
@@ -683,7 +828,7 @@ async function renderTeamSheetScreen(fixture, team) {
     const memberRows = [];
     const adHocRows = [];
     squad.forEach(p => {
-      const isIn = document.querySelector(`[data-player-id="${p.playerId}"]`).getAttribute("aria-pressed") === "true";
+      const isIn = !!p.isIn;
       if (p.userId) {
         memberRows.push({ team_sheet_id: sheet.id, user_id: p.userId, is_in: isIn });
       } else {
@@ -757,10 +902,11 @@ let resultDraft = null;
 //   motmPlayerId, dotdPlayerId, addToMyRecord }
 
 async function renderAddResultScreen(fixture, team) {
-  const [sheet, players, { data: existingAppearances, error: appearancesError }] = await Promise.all([
+  const [sheet, players, { data: existingAppearances, error: appearancesError }, usage] = await Promise.all([
     loadOrCreateTeamSheet(fixture.id),
     ensurePlayersForTeam(team.id, team.members),
-    supabaseClient.from("fixture_appearances").select("*").eq("fixture_id", fixture.id)
+    supabaseClient.from("fixture_appearances").select("*").eq("fixture_id", fixture.id),
+    loadSquadUsage(team.id)
   ]);
   if (appearancesError) console.error("Failed to load existing appearances:", appearancesError);
 
@@ -804,7 +950,7 @@ async function renderAddResultScreen(fixture, team) {
   const dotdPlayerId = (existingAppearances || []).find(a => a.is_dotd)?.player_id ?? null;
 
   resultDraft = {
-    fixture, team, squad,
+    fixture, team, squad, usage,
     goalsFor: fixture.goals_for ?? 0,
     goalsAgainst: fixture.goals_against ?? 0,
     resultTag: null,
@@ -828,10 +974,6 @@ function resultTagFromScore() {
 function renderResultScoreStep() {
   const { fixture, team, squad } = resultDraft;
   const tag = resultDraft.resultTag || resultTagFromScore();
-
-  const squadChips = squad.map(p => `
-    <button type="button" class="chip" data-squad-player="${p.playerId}" aria-pressed="${p.inSquad}">${escapeHtml(p.name)}</button>
-  `).join("");
 
   matchList.innerHTML = `
     <button type="button" id="result-back-btn" class="btn btn--ghost btn--sm" style="margin-bottom:12px;">← Back</button>
@@ -875,12 +1017,8 @@ function renderResultScoreStep() {
       <input type="text" id="result-kit" value="${escapeHtml(resultDraft.kit)}">
     </div>
 
-    <p class="label" id="result-squad-count-label" style="margin-top:16px;">Who played? (${squad.filter(p => p.inSquad).length})</p>
-    <div class="chips" id="result-squad-chips">${squadChips}</div>
-    <div class="field" style="display:flex;gap:8px;margin-top:8px;">
-  <input type="text" id="result-add-player-input" placeholder="Add a player not on the team">
-  <button type="button" id="result-add-player-btn" class="btn btn--ghost btn--sm">Add</button>
-</div>
+    <p class="label" style="margin-top:16px;">Who played?</p>
+    <div class="card squad-picker" id="result-squad-picker"></div>
 
     <button type="button" id="result-next-btn" class="btn" style="margin-top:20px;">Next — goals & cards</button>
     <button type="button" id="result-save-score-btn" class="btn btn--ghost" style="margin-top:10px;">Save just the score</button>
@@ -906,35 +1044,13 @@ function renderResultScoreStep() {
     syncTag(chip.dataset.tag);
   });
 
-  document.getElementById("result-squad-chips").addEventListener("click", (event) => {
-    const chip = event.target.closest(".chip");
-    if (!chip) return;
-    const player = squad.find(p => p.playerId === chip.dataset.squadPlayer);
-    player.inSquad = !player.inSquad;
-    chip.setAttribute("aria-pressed", player.inSquad ? "true" : "false");
-    document.getElementById("result-squad-count-label").textContent = `Who played? (${squad.filter(p => p.inSquad).length})`;
+  mountSquadPicker({
+    el: document.getElementById("result-squad-picker"),
+    team, squad,
+    usage: resultDraft.usage || new Map(),
+    pickedKey: "inSquad",
+    makeEntry: (row) => ({ playerId: row.id, userId: null, name: row.display_name, inSquad: true, goals: 0, assists: 0, yellowCards: 0, redCard: false, motmVotes: 0, dotdVotes: 0 })
   });
-
-  document.getElementById("result-add-player-btn").addEventListener("click", async () => {
-  const input = document.getElementById("result-add-player-input");
-  const name = input.value.trim();
-  if (!name) return;
-
-  const { data: newPlayer, error } = await supabaseClient
-    .from("players")
-    .insert({ team_id: team.id, display_name: name })
-    .select()
-    .single();
-  if (error) { console.error("Failed to add player:", error); return; }
-
-  const entry = { playerId: newPlayer.id, userId: null, name: newPlayer.display_name, inSquad: true, goals: 0, assists: 0, yellowCards: 0, redCard: false, motmVotes: 0, dotdVotes: 0 };
-  squad.push(entry);
-
-  document.getElementById("result-squad-chips").insertAdjacentHTML("beforeend",
-    `<button type="button" class="chip" data-squad-player="${entry.playerId}" aria-pressed="true">${escapeHtml(entry.name)}</button>`);
-  document.getElementById("result-squad-count-label").textContent = `Who played? (${squad.filter(p => p.inSquad).length})`;
-  input.value = "";
-});
 
   document.getElementById("result-next-btn").addEventListener("click", () => {
     resultDraft.venue = document.getElementById("result-venue").value.trim() || null;

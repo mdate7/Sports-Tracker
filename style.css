@@ -840,3 +840,24 @@ body.gym-timer-on { overflow: hidden; }
 [data-size="clear"] #gym-timer-sheet .set-numbers { flex-wrap: wrap; }
 .gt__eyebrow { margin: 0; color: var(--sport); }
 .gym-timer[data-phase="rest"] .gt__eyebrow, .gym-timer[data-phase="ready"] .gt__eyebrow { color: var(--muted); }
+
+/* --- Squad picker (team sheet and "who played?") -------------------------- */
+.squad-picker { display: flex; flex-direction: column; gap: var(--s-3); }
+.squad-picker__count { margin: 0; }
+.squad-picker__main, .squad-picker__others .chips { flex-wrap: wrap; }
+.squad-picker__others { border-top: 1px solid var(--line); padding-top: var(--s-3); }
+.squad-picker__others > summary {
+  cursor: pointer; font: var(--t-value); color: var(--muted);
+  list-style: none; display: flex; align-items: center; gap: var(--s-2);
+}
+.squad-picker__others > summary::-webkit-details-marker { display: none; }
+.squad-picker__others > summary::before { content: "▸"; display: inline-block; transition: transform 150ms; }
+.squad-picker__others[open] > summary::before { transform: rotate(90deg); }
+.squad-picker__others[open] > summary { margin-bottom: var(--s-3); color: var(--text); }
+.squad-picker__others[hidden] { display: none; }
+.squad-picker__search { margin-bottom: var(--s-2); }
+.squad-picker__empty { color: var(--muted); margin: var(--s-2) 0 0; }
+.squad-picker__new { border-top: 1px solid var(--line); padding-top: var(--s-3); }
+.squad-picker__new-actions { display: flex; gap: var(--s-2); }
+.squad-picker__msg { color: var(--muted); margin: var(--s-2) 0 0; min-height: 0; }
+.squad-picker__msg:empty { display: none; }
