@@ -787,3 +787,56 @@ body.rest-bar-on #match-form { padding-bottom: 96px; }
 [data-size="clear"] .sc-loading__note,
 [data-size="clear"] .sc-loading__time { font-size: inherit; }
 [data-size="clear"] .sc-pending__thumb { width: 56px; height: 56px; }
+
+/* --- Gym workout timer (intervals / AMRAP / stopwatch) -------------------- */
+.gym-add-row { display: flex; gap: var(--s-2); margin-top: var(--s-2); }
+.gym-add-row .btn { flex: 1; }
+.gt-modes { display: flex; gap: var(--s-2); margin-bottom: var(--s-3); flex-wrap: wrap; }
+.gt-hint { font: var(--t-body); color: var(--muted); margin: 0 0 var(--s-3); }
+.gt-error { font: var(--t-body); color: var(--negative); margin: 0 0 var(--s-2); min-height: 1em; }
+#gym-timer-sheet .set-numbers { display: flex; gap: var(--s-2); }
+#gym-timer-sheet .set-numbers .field { flex: 1; min-width: 0; }
+
+.gym-timer {
+  position: fixed; inset: 0; z-index: 50;
+  max-width: var(--app-max); margin-inline: auto;
+  display: flex; flex-direction: column;
+  padding: calc(var(--s-4) + env(safe-area-inset-top)) var(--gutter) calc(var(--s-4) + env(safe-area-inset-bottom));
+  background: var(--bg);
+  color: var(--text);
+  transition: background-color 300ms;
+}
+.gym-timer[hidden] { display: none; }
+.gym-timer[data-phase="work"] { background: color-mix(in oklab, var(--chart-gym) 26%, var(--bg)); }
+.gym-timer[data-phase="rest"] { background: var(--surface); }
+body.gym-timer-on { overflow: hidden; }
+.gt__top .label { margin: 0; }
+.gt__main {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--s-3); text-align: center; min-height: 0;
+}
+.gt__phase { font: var(--t-title); letter-spacing: var(--track-tight); margin: 0; overflow-wrap: anywhere; }
+.gym-timer[data-phase="rest"] .gt__phase { color: var(--muted); }
+.gt__time { font: var(--t-hero-xl); font-size: clamp(4.5rem, 26vw, 8rem); letter-spacing: var(--track-hero); margin: 0; line-height: 1; }
+.gt__track { width: 100%; height: 8px; border-radius: var(--r-chip); background: color-mix(in oklab, var(--text) 14%, transparent); overflow: hidden; }
+.gt__track i { display: block; height: 100%; width: 0; background: var(--chart-gym); transition: width 200ms linear; }
+.gym-timer[data-phase="rest"] .gt__track i, .gym-timer[data-phase="ready"] .gt__track i { background: var(--muted); }
+.gt__next { font: var(--t-value); color: var(--muted); margin: 0; }
+.gt__count {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  width: min(220px, 60vw); aspect-ratio: 1; border-radius: 50%;
+  border: 2px solid var(--chart-gym);
+  background: color-mix(in oklab, var(--chart-gym) 18%, transparent);
+  color: var(--text); cursor: pointer; margin-top: var(--s-2);
+  -webkit-tap-highlight-color: transparent;
+}
+.gt__count:active { transform: scale(0.97); }
+.gt__count-n { font: var(--t-hero-xl); }
+.gt__count-l { font: var(--t-body); color: var(--muted); }
+.gt__controls { display: flex; gap: var(--s-2); }
+.gt__controls .btn { flex: 1; }
+.gt__result { width: 100%; text-align: left; }
+[data-size="clear"] .gt__controls { flex-direction: column-reverse; }
+[data-size="clear"] #gym-timer-sheet .set-numbers { flex-wrap: wrap; }
+.gt__eyebrow { margin: 0; color: var(--sport); }
+.gym-timer[data-phase="rest"] .gt__eyebrow, .gym-timer[data-phase="ready"] .gt__eyebrow { color: var(--muted); }
