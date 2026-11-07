@@ -234,6 +234,7 @@ function closeEntryScreen() {
   // The gym rest bar sits outside the form, so it has to be put away explicitly.
   if (typeof hideRestBar === "function") hideRestBar();
   if (typeof stopScorecardWatching === "function") stopScorecardWatching();
+  if (typeof closeGymTimer === "function") closeGymTimer();
   editingId = null;
   golfRound = null;
   gymSession = null;

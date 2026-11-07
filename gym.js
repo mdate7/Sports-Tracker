@@ -40,6 +40,7 @@ function describeGymSet(s) {
     const bits = [];
     if (s.duration) bits.push(formatDuration(s.duration));
     if (s.distance) bits.push(`${Number(s.distance).toLocaleString("en-GB", { maximumFractionDigits: 2 })} km`);
+    if (s.rounds && s.rounds > 1) bits.push(`${s.rounds} rounds`);
     return bits.join(" · ") || "Time / distance";
   }
   return `${s.weight || 0}kg × ${s.reps || 0} reps${s.rounds && s.rounds > 1 ? ` × ${s.rounds} rounds` : ""}`;
@@ -199,6 +200,10 @@ function renderGymSets() {
           <label class="label" for="set-distance-${index}">Distance (km)</label>
           <input type="number" inputmode="decimal" step="0.01" id="set-distance-${index}" value="${set.distance}">
         </div>
+        <div class="field" style="flex:1;">
+          <label class="label" for="set-rounds-${index}">Rounds</label>
+          <input type="number" inputmode="numeric" id="set-rounds-${index}" value="${set.rounds}">
+        </div>
       </div>` : `
       <div class="set-numbers">
         <div class="field" style="flex:1;">
@@ -249,7 +254,10 @@ function renderGymSets() {
     </div>
     ${gymSession.repeatedFrom ? `<p class="repeat-banner">Copied from ${formatFixtureDate(gymSession.repeatedFrom)}. Change anything that was different this time.</p>` : ""}
     <div id="gym-sets-list" style="margin-top:10px;">${setsHtml || `<p class="empty-state">No sets yet.</p>`}</div>
-    <button type="button" id="gym-add-set-btn" class="btn btn--ghost" style="margin-top:8px;">+ Add set</button>
+    <div class="gym-add-row">
+      <button type="button" id="gym-add-set-btn" class="btn btn--ghost">+ Add set</button>
+      <button type="button" id="gym-timer-btn" class="btn btn--ghost">⏱ Timer</button>
+    </div>
     <button type="button" id="gym-finish-btn" class="btn" style="margin-top:16px;">Finish session</button>
   `;
 
@@ -259,6 +267,12 @@ function renderGymSets() {
   document.getElementById("gym-session-name").addEventListener("change", (event) => {
     gymSession.name = event.target.value.trim();
     persist();
+  });
+
+  document.getElementById("gym-timer-btn").addEventListener("click", () => {
+    saveGymSetInputs();
+    persist();
+    openGymTimerSheet();
   });
 
   // New sets start as a copy of the one above (same exercise, weight, time),
@@ -335,8 +349,8 @@ function saveGymSetInputs() {
     } else {
       set.weight = val(`set-weight-${index}`) !== "" ? Number(val(`set-weight-${index}`)) : "";
       set.reps = Number(val(`set-reps-${index}`)) || "";
-      set.rounds = Number(val(`set-rounds-${index}`)) || "";
     }
+    set.rounds = Number(val(`set-rounds-${index}`)) || "";
   });
 }
 
@@ -414,11 +428,7 @@ function startRest(seconds) {
   rest.duration = seconds;
   rest.endAt = Date.now() + seconds * 1000;
   try { localStorage.setItem("gymRestSeconds", String(seconds)); } catch (e) { /* fine */ }
-  // Sound needs to be unlocked by a tap, so prepare it now rather than at the end.
-  try {
-    rest.audio = rest.audio || new (window.AudioContext || window.webkitAudioContext)();
-    rest.audio.resume?.();
-  } catch (e) { rest.audio = null; }
+  unlockGymAudio();
   clearInterval(rest.interval);
   rest.interval = setInterval(tickRest, 250);
   paintRest();
@@ -451,22 +461,36 @@ function restDone() {
   paintRest("done");
   // Buzz where the phone supports it (Android); beep everywhere else too.
   try { navigator.vibrate?.([300, 120, 300]); } catch (e) { /* not supported */ }
+  gymBeep([[880, 0], [880, 0.28]]);
+  rest.doneTimer = setTimeout(() => { if (!rest.endAt) paintRest(); }, 8000);
+}
+
+// Sound needs to be unlocked by a tap, so this runs when a timer is started
+// rather than when it ends.
+function unlockGymAudio() {
+  try {
+    rest.audio = rest.audio || new (window.AudioContext || window.webkitAudioContext)();
+    rest.audio.resume?.();
+  } catch (e) { rest.audio = null; }
+}
+
+// notes: [[frequency, offset seconds, length seconds?], ...]
+function gymBeep(notes) {
   try {
     const ctx = rest.audio;
-    if (ctx && document.visibilityState === "visible") {
-      [0, 0.28].forEach(offset => {
-        const osc = ctx.createOscillator(), gain = ctx.createGain();
-        osc.frequency.value = 880;
-        gain.gain.setValueAtTime(0.0001, ctx.currentTime + offset);
-        gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + offset + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + offset + 0.2);
-        osc.connect(gain).connect(ctx.destination);
-        osc.start(ctx.currentTime + offset);
-        osc.stop(ctx.currentTime + offset + 0.22);
-      });
-    }
+    if (!ctx || document.visibilityState !== "visible") return;
+    notes.forEach(([freq, offset, len = 0.2]) => {
+      const osc = ctx.createOscillator(), gain = ctx.createGain();
+      const t = ctx.currentTime + offset;
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + len);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + len + 0.02);
+    });
   } catch (e) { /* sound is a nice-to-have */ }
-  rest.doneTimer = setTimeout(() => { if (!rest.endAt) paintRest(); }, 8000);
 }
 
 function onRestBarClick(event) {
@@ -481,6 +505,411 @@ function onRestBarClick(event) {
   }
   if (event.target.closest("[data-rest-stop]")) { stopRest(); return; }
   if (event.target.closest("[data-rest-dismiss]")) { clearTimeout(rest.doneTimer); paintRest(); }
+}
+
+// --- Workout timer: intervals, AMRAP, stopwatch --------------------------------
+// A full-screen timer for timed work (core circuits, AMRAPs, plank holds), as
+// opposed to the rest bar between sets. Like the rest bar it runs off a start
+// time rather than counting ticks, so switching apps or locking the phone
+// doesn't make it drift. When it ends, what was done is added to the session as
+// time sets, which can be edited like any other set before saving.
+const GYM_TIMER_LEAD = 5; // seconds of "get ready" before intervals and AMRAP
+const gymTimer = { cfg: null, startedAt: 0, pausedAt: 0, pausedMs: 0, count: 0, key: "", beeped: "", ticker: null, finished: false };
+
+function loadGymTimerCfg() {
+  const defaults = { mode: "intervals", work: 45, rest: 15, rounds: 8, exercises: "", minutes: 12, name: "", muscle: "" };
+  try { return { ...defaults, ...JSON.parse(localStorage.getItem("gymTimerCfg") || "{}") }; } catch (e) { return defaults; }
+}
+
+function gymTimerSheetEl() {
+  let sheet = document.getElementById("gym-timer-sheet");
+  if (!sheet) {
+    sheet = document.createElement("div");
+    sheet.id = "gym-timer-sheet";
+    sheet.className = "sheet";
+    sheet.hidden = true;
+    sheet.dataset.sport = "gym";
+    document.body.appendChild(sheet);
+    // One listener for the life of the page; the contents are redrawn freely.
+    sheet.addEventListener("click", onGymTimerSheetClick);
+  }
+  return sheet;
+}
+
+function openGymTimerSheet() {
+  const sheet = gymTimerSheetEl();
+  paintGymTimerSheet(loadGymTimerCfg());
+  sheet.hidden = false;
+  requestAnimationFrame(() => sheet.classList.add("is-open"));
+}
+
+function closeGymTimerSheet() {
+  const sheet = document.getElementById("gym-timer-sheet");
+  if (!sheet) return;
+  sheet.classList.remove("is-open");
+  sheet.hidden = true;
+}
+
+function paintGymTimerSheet(cfg) {
+  const sheet = gymTimerSheetEl();
+  const field = (id, label, value, attrs = "") => `
+    <div class="field">
+      <label class="label" for="${id}">${label}</label>
+      <input id="${id}" value="${escapeHtml(value)}" ${attrs}>
+    </div>`;
+  const muscleOptions = getDistinctGymValues("muscleGroup").map(v => `<option value="${escapeHtml(v)}"></option>`).join("");
+  const modeFields = {
+    intervals: `
+      <div class="set-numbers">
+        ${field("gt-work", "Work (sec)", cfg.work, 'type="number" inputmode="numeric" min="1"')}
+        ${field("gt-rest", "Rest (sec)", cfg.rest, 'type="number" inputmode="numeric" min="0"')}
+        ${field("gt-rounds", "Rounds", cfg.rounds, 'type="number" inputmode="numeric" min="1"')}
+      </div>
+      ${field("gt-exercises", "Exercises (optional, in order)", cfg.exercises, 'type="text" placeholder="e.g. Plank, Crunches, Mountain climbers"')}
+      <p class="gt-hint">A round is once through the list. Leave it blank for plain on/off intervals.</p>`,
+    amrap: `
+      ${field("gt-minutes", "Minutes", cfg.minutes, 'type="number" inputmode="numeric" min="1"')}
+      ${field("gt-name", "Name (optional)", cfg.name, 'type="text" placeholder="AMRAP"')}
+      <p class="gt-hint">Tap the big button each time you finish a round.</p>`,
+    stopwatch: `
+      ${field("gt-name", "Exercise", cfg.name, 'type="text" placeholder="e.g. Plank" list="exercise-options"')}
+      <p class="gt-hint">Counts up until you stop it. Good for holds.</p>`
+  }[cfg.mode];
+  sheet.innerHTML = `
+    <div class="sheet__backdrop" data-gt-close></div>
+    <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="gt-sheet-title">
+      <div class="sheet__head">
+        <h2 id="gt-sheet-title" class="sheet__title">Timer</h2>
+        <button type="button" class="btn btn--ghost btn--sm" data-gt-close>Close</button>
+      </div>
+      <div class="sheet__body">
+        <div class="chips gt-modes" role="group" aria-label="Timer type">
+          ${[["intervals", "Intervals"], ["amrap", "AMRAP"], ["stopwatch", "Stopwatch"]].map(([id, label]) =>
+            `<button type="button" class="chip" data-gt-mode="${id}" aria-pressed="${cfg.mode === id}">${label}</button>`).join("")}
+        </div>
+        ${modeFields}
+        <datalist id="gt-muscle-options">${muscleOptions}</datalist>
+        ${field("gt-muscle", "Muscle group (optional)", cfg.muscle, 'type="text" list="gt-muscle-options" placeholder="e.g. Core"')}
+        <p class="gt-error" id="gt-error" role="alert"></p>
+        <button type="button" class="btn" data-gt-start>Start</button>
+      </div>
+    </div>`;
+}
+
+// What's typed in the sheet, merged over the saved settings.
+function readGymTimerSheet() {
+  const cfg = loadGymTimerCfg();
+  const sheet = gymTimerSheetEl();
+  cfg.mode = sheet.querySelector('[data-gt-mode][aria-pressed="true"]')?.dataset.gtMode || cfg.mode;
+  const v = (id) => document.getElementById(id)?.value;
+  const int = (id) => Math.round(Number(v(id)));
+  if (v("gt-work") !== undefined) { cfg.work = int("gt-work"); cfg.rest = int("gt-rest"); cfg.rounds = int("gt-rounds"); cfg.exercises = v("gt-exercises").trim(); }
+  if (v("gt-minutes") !== undefined) cfg.minutes = Number(v("gt-minutes"));
+  if (v("gt-name") !== undefined) cfg.name = v("gt-name").trim();
+  cfg.muscle = (v("gt-muscle") || "").trim();
+  return cfg;
+}
+
+function saveGymTimerCfg(cfg) {
+  try { localStorage.setItem("gymTimerCfg", JSON.stringify(cfg)); } catch (e) { /* settings just won't stick */ }
+}
+
+function onGymTimerSheetClick(event) {
+  if (event.target.closest("[data-gt-close]")) { closeGymTimerSheet(); return; }
+  const mode = event.target.closest("[data-gt-mode]");
+  if (mode) {
+    const cfg = readGymTimerSheet();
+    cfg.mode = mode.dataset.gtMode;
+    saveGymTimerCfg(cfg);
+    paintGymTimerSheet(cfg);
+    return;
+  }
+  if (event.target.closest("[data-gt-start]")) {
+    const cfg = readGymTimerSheet();
+    const problem =
+      cfg.mode === "intervals" && !(cfg.work >= 1 && cfg.rest >= 0 && cfg.rounds >= 1) ? "Work and rounds need to be at least 1." :
+      cfg.mode === "amrap" && !(cfg.minutes > 0) ? "Set how many minutes." : "";
+    if (problem) { document.getElementById("gt-error").textContent = problem; return; }
+    saveGymTimerCfg(cfg);
+    closeGymTimerSheet();
+    startGymTimer(cfg);
+  }
+}
+
+function gymTimerExercises(cfg) {
+  return String(cfg.exercises || "").split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+}
+
+// A round is once through the exercise list, so 3 exercises x 4 rounds is
+// 12 work intervals. With no list, each interval is a round.
+function gymIntervalCount(cfg) {
+  return cfg.rounds * Math.max(1, gymTimerExercises(cfg).length);
+}
+
+function gymTimerEl() {
+  let el = document.getElementById("gym-timer");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "gym-timer";
+    el.className = "gym-timer";
+    el.dataset.sport = "gym";
+    el.setAttribute("role", "timer");
+    el.hidden = true;
+    document.body.appendChild(el);
+    el.addEventListener("click", onGymTimerClick);
+    document.addEventListener("visibilitychange", () => { if (gymTimer.cfg && !gymTimer.finished) tickGymTimer(); });
+  }
+  return el;
+}
+
+function startGymTimer(cfg) {
+  unlockGymAudio();
+  Object.assign(gymTimer, { cfg, startedAt: Date.now(), pausedAt: 0, pausedMs: 0, count: 0, key: "", beeped: "", finished: false });
+  const el = gymTimerEl();
+  el.hidden = false;
+  document.body.classList.add("gym-timer-on");
+  clearInterval(gymTimer.ticker);
+  gymTimer.ticker = setInterval(tickGymTimer, 200);
+  tickGymTimer();
+}
+
+function gymTimerElapsed() {
+  const now = gymTimer.pausedAt || Date.now();
+  return Math.max(0, (now - gymTimer.startedAt - gymTimer.pausedMs) / 1000);
+}
+
+// Where the timer is at a given number of seconds in. Pure, so it can be
+// recomputed from scratch after the phone has been asleep.
+function gymTimerState(cfg, elapsed, count) {
+  if (cfg.mode === "stopwatch") return { phase: "go", shown: Math.floor(elapsed), progress: null, done: false };
+  const t = elapsed - GYM_TIMER_LEAD;
+  if (t < 0) return { phase: "ready", shown: Math.ceil(-t), progress: 1 - (-t / GYM_TIMER_LEAD), done: false, left: Math.ceil(-t) };
+  if (cfg.mode === "amrap") {
+    const total = cfg.minutes * 60;
+    if (t >= total) return { phase: "done", done: true };
+    return { phase: "work", shown: Math.ceil(total - t), progress: t / total, left: Math.ceil(total - t), done: false, count };
+  }
+  const cycle = cfg.work + cfg.rest;
+  const n = gymIntervalCount(cfg);
+  const total = n * cfg.work + (n - 1) * cfg.rest;
+  if (t >= total) return { phase: "done", done: true };
+  const round = Math.floor(t / cycle);
+  const within = t - round * cycle;
+  const working = within < cfg.work;
+  const phaseLeft = working ? cfg.work - within : cycle - within;
+  const phaseLen = working ? cfg.work : cfg.rest;
+  return { phase: working ? "work" : "rest", round, shown: Math.ceil(phaseLeft), left: Math.ceil(phaseLeft), progress: 1 - phaseLeft / phaseLen, done: false };
+}
+
+// Work intervals finished by `elapsed`, as a count per position in the list.
+function gymIntervalsDone(cfg, elapsed) {
+  const t = Math.max(0, elapsed - GYM_TIMER_LEAD);
+  const cycle = cfg.work + cfg.rest;
+  let done = 0;
+  for (let i = 0, n = gymIntervalCount(cfg); i < n; i++) if (t >= i * cycle + cfg.work) done++;
+  return done;
+}
+
+function tickGymTimer() {
+  const cfg = gymTimer.cfg;
+  if (!cfg || gymTimer.finished) return;
+  const elapsed = gymTimerElapsed();
+  const st = gymTimerState(cfg, elapsed, gymTimer.count);
+  if (st.done) { finishGymTimer(false); return; }
+
+  // Beeps: short pips for the last three seconds of a phase, a long one when
+  // work starts, a low double when rest starts.
+  const key = `${st.phase}:${st.round ?? ""}`;
+  if (!gymTimer.pausedAt) {
+    if (key !== gymTimer.key && gymTimer.key) {
+      if (st.phase === "work") gymBeep([[990, 0, 0.45]]);
+      else if (st.phase === "rest") gymBeep([[520, 0], [520, 0.25]]);
+      if (st.phase !== "ready") try { navigator.vibrate?.(st.phase === "work" ? 400 : [150, 100, 150]); } catch (e) { /* fine */ }
+    }
+    const pip = `${key}:${st.left}`;
+    if (st.left && st.left <= 3 && st.phase !== "go" && gymTimer.beeped !== pip) {
+      gymTimer.beeped = pip;
+      gymBeep([[660, 0, 0.1]]);
+    }
+  }
+  if (key !== gymTimer.key || gymTimer.pausedChanged) {
+    gymTimer.key = key;
+    gymTimer.pausedChanged = false;
+    paintGymTimer(st);
+  }
+  const el = document.getElementById("gym-timer");
+  const time = el?.querySelector(".gt__time");
+  const fill = el?.querySelector(".gt__track i");
+  if (time) time.textContent = formatDuration(st.shown);
+  if (fill && st.progress !== null) fill.style.width = `${Math.min(100, st.progress * 100)}%`;
+}
+
+function paintGymTimer(st) {
+  const cfg = gymTimer.cfg;
+  const el = gymTimerEl();
+  const exercises = gymTimerExercises(cfg);
+  const paused = Boolean(gymTimer.pausedAt);
+  el.dataset.phase = st.phase;
+  const exAt = (i) => exercises.length ? exercises[i % exercises.length] : "";
+  let heading = "", eyebrow = "", sub = "", next = "", big = "";
+  if (cfg.mode === "intervals") {
+    const i = st.phase === "ready" ? 0 : st.round; // which work interval
+    const per = Math.max(1, exercises.length);
+    const total = gymIntervalCount(cfg);
+    heading = `Intervals · ${cfg.work}s on / ${cfg.rest}s off`;
+    eyebrow = { ready: "Get ready", work: "Work", rest: "Rest" }[st.phase];
+    sub = st.phase === "rest" ? (exAt(i + 1) ? `Next: ${exAt(i + 1)}` : "Rest") : (exAt(i) || (st.phase === "work" ? "Go" : `${cfg.work}s on`));
+    next = `Round ${Math.floor(i / per) + 1} of ${cfg.rounds}` + (exercises.length > 1 ? ` · ${(i % per) + 1} of ${per}` : "") +
+      (st.phase === "work" && i + 1 < total && cfg.rest ? ` · then ${cfg.rest}s rest` : "");
+  } else if (cfg.mode === "amrap") {
+    heading = `AMRAP · ${cfg.minutes} min${cfg.name ? ` · ${cfg.name}` : ""}`;
+    eyebrow = st.phase === "ready" ? "Get ready" : "Time left";
+    sub = cfg.name || "AMRAP";
+    if (st.phase !== "ready") big = `
+      <button type="button" class="gt__count" data-gt-round aria-label="Finished a round. ${gymTimer.count} so far">
+        <span class="gt__count-n num">${gymTimer.count}</span>
+        <span class="gt__count-l">rounds · tap +1</span>
+      </button>
+      <button type="button" class="chip" data-gt-undo ${gymTimer.count ? "" : "disabled"}>Undo</button>`;
+  } else {
+    heading = "Stopwatch";
+    sub = cfg.name || "Hold";
+  }
+  el.innerHTML = `
+    <div class="gt__top">
+      <p class="label">${escapeHtml(heading)}</p>
+    </div>
+    <div class="gt__main">
+      ${eyebrow ? `<p class="label gt__eyebrow">${paused ? "Paused" : eyebrow}</p>` : ""}
+      <p class="gt__phase">${escapeHtml(paused && !eyebrow ? "Paused" : sub)}</p>
+      <p class="gt__time num">${formatDuration(st.shown)}</p>
+      ${st.progress === null ? "" : `<div class="gt__track" aria-hidden="true"><i></i></div>`}
+      ${next ? `<p class="gt__next">${escapeHtml(next)}</p>` : ""}
+      ${big}
+    </div>
+    <div class="gt__controls">
+      <button type="button" class="btn btn--ghost" data-gt-pause>${paused ? "Resume" : "Pause"}</button>
+      <button type="button" class="btn" data-gt-finish>${cfg.mode === "stopwatch" ? "Stop" : "Finish"}</button>
+    </div>`;
+}
+
+// The sets this run adds to the session. Time is the total time worked, so
+// session totals and Insights stay right; rounds says how many.
+function gymTimerSets(cfg, elapsed, count) {
+  const muscleGroup = cfg.muscle || "";
+  const set = (exercise, duration, rounds) => ({ ...blankGymSet("time"), exercise, muscleGroup, duration: Math.round(duration), rounds: rounds > 1 ? rounds : "" });
+  if (cfg.mode === "stopwatch") {
+    return elapsed >= 1 ? [set(cfg.name || "Hold", elapsed, 1)] : [];
+  }
+  if (cfg.mode === "amrap") {
+    const worked = Math.min(cfg.minutes * 60, Math.max(0, elapsed - GYM_TIMER_LEAD));
+    if (worked < 1) return [];
+    const s = set(cfg.name || "AMRAP", worked, count);
+    s.rounds = count || ""; // even 1 round is worth saying for an AMRAP
+    return [s];
+  }
+  const done = gymIntervalsDone(cfg, elapsed);
+  if (!done) return [];
+  const exercises = gymTimerExercises(cfg);
+  if (!exercises.length) return [set(`Intervals ${cfg.work}s on / ${cfg.rest}s off`, done * cfg.work, done)];
+  // Same exercise typed twice is one set; order is the order they were done.
+  const tally = new Map();
+  for (let i = 0; i < done; i++) {
+    const name = exercises[i % exercises.length];
+    const k = name.toLowerCase();
+    if (!tally.has(k)) tally.set(k, { name, n: 0 });
+    tally.get(k).n++;
+  }
+  return [...tally.values()].map(({ name, n }) => set(name, n * cfg.work, n));
+}
+
+function finishGymTimer(early) {
+  const cfg = gymTimer.cfg;
+  if (!cfg) return;
+  const elapsed = early ? gymTimerElapsed() : Infinity;
+  gymTimer.finished = true;
+  clearInterval(gymTimer.ticker);
+  if (!early) {
+    gymBeep([[990, 0, 0.15], [990, 0.22, 0.15], [1320, 0.44, 0.5]]);
+    try { navigator.vibrate?.([300, 120, 300, 120, 500]); } catch (e) { /* fine */ }
+  }
+  const sets = gymTimerSets(cfg, elapsed, gymTimer.count);
+  gymTimer.pending = sets;
+  const el = gymTimerEl();
+  el.dataset.phase = "done";
+  el.innerHTML = `
+    <div class="gt__main">
+      <p class="gt__phase">${early ? "Stopped" : "Done"}</p>
+      ${sets.length ? `
+        <p class="gt__next">Add this to your session?</p>
+        <div class="card gt__result">
+          ${sets.map(s => `
+            <div class="review-ex">
+              <div class="review-ex__head">
+                <span class="review-ex__name">${escapeHtml(s.exercise)}</span>
+                ${s.muscleGroup ? `<span class="label">${escapeHtml(s.muscleGroup)}</span>` : ""}
+              </div>
+              <div class="review-ex__sets"><span class="set-pill num">${escapeHtml(describeGymSet(s))}</span></div>
+            </div>`).join("")}
+        </div>
+        <p class="gt-hint">You can change anything on the sets screen before saving.</p>`
+      : `<p class="gt__next">Nothing to log: no rounds were finished.</p>`}
+    </div>
+    <div class="gt__controls">
+      <button type="button" class="btn btn--ghost" data-gt-discard>${sets.length ? "Don't add" : "Close"}</button>
+      ${sets.length ? `<button type="button" class="btn" data-gt-add>Add ${sets.length === 1 ? "set" : `${sets.length} sets`}</button>` : ""}
+    </div>`;
+}
+
+function closeGymTimer() {
+  clearInterval(gymTimer.ticker);
+  gymTimer.cfg = null;
+  gymTimer.pending = null;
+  const el = document.getElementById("gym-timer");
+  if (el) { el.hidden = true; el.innerHTML = ""; }
+  document.body.classList.remove("gym-timer-on");
+  closeGymTimerSheet();
+}
+
+function onGymTimerClick(event) {
+  if (event.target.closest("[data-gt-round]")) {
+    gymTimer.count++;
+    try { navigator.vibrate?.(40); } catch (e) { /* fine */ }
+    const n = document.querySelector(".gt__count-n");
+    if (n) n.textContent = gymTimer.count;
+    const undo = document.querySelector("[data-gt-undo]");
+    if (undo) undo.disabled = false;
+    return;
+  }
+  if (event.target.closest("[data-gt-undo]")) {
+    gymTimer.count = Math.max(0, gymTimer.count - 1);
+    gymTimer.pausedChanged = true;
+    tickGymTimer();
+    return;
+  }
+  if (event.target.closest("[data-gt-pause]")) {
+    if (gymTimer.pausedAt) { gymTimer.pausedMs += Date.now() - gymTimer.pausedAt; gymTimer.pausedAt = 0; }
+    else gymTimer.pausedAt = Date.now();
+    gymTimer.pausedChanged = true;
+    tickGymTimer();
+    return;
+  }
+  if (event.target.closest("[data-gt-finish]")) { finishGymTimer(true); return; }
+  if (event.target.closest("[data-gt-discard]")) { closeGymTimer(); return; }
+  if (event.target.closest("[data-gt-add]")) {
+    const sets = gymTimer.pending || [];
+    closeGymTimer();
+    if (!gymSession) return;
+    // A blank set left at the end (e.g. just tapped + Add set) is replaced
+    // rather than left behind as an empty one.
+    const last = gymSession.sets[gymSession.sets.length - 1];
+    const blank = last && !last.exercise && !last.weight && !last.reps && !last.duration && !last.distance;
+    if (blank) gymSession.sets.pop();
+    gymSession.sets.push(...sets);
+    if (!gymSession.editingMatchId) saveSessionProgress();
+    renderGymSets();
+    document.getElementById(`set-exercise-${gymSession.sets.length - sets.length}`)?.scrollIntoView({ block: "center" });
+  }
 }
 
 // --- Review ------------------------------------------------------------------
@@ -508,7 +937,8 @@ function summariseGymSession(sets) {
 
 function shortSetLabel(s) {
   if (s.measure === "time") {
-    return [s.duration ? formatDuration(s.duration) : "", s.distance ? `${Number(s.distance).toLocaleString("en-GB", { maximumFractionDigits: 2 })} km` : ""].filter(Boolean).join(" · ") || "–";
+    return [s.duration ? formatDuration(s.duration) : "", s.distance ? `${Number(s.distance).toLocaleString("en-GB", { maximumFractionDigits: 2 })} km` : "",
+      s.rounds && s.rounds > 1 ? `×${s.rounds}` : ""].filter(Boolean).join(" · ") || "–";
   }
   const base = `${s.weight || 0}×${s.reps || "?"}`;
   return s.rounds && s.rounds > 1 ? `${base} ×${s.rounds}` : base;
@@ -556,7 +986,7 @@ function gymSetRow(set, index, matchId) {
     measure: isTime ? "time" : "reps",
     weight: isTime ? null : num(set.weight),
     reps: isTime ? null : num(set.reps),
-    rounds: isTime ? null : num(set.rounds),
+    rounds: num(set.rounds), // time sets use it too: interval blocks and AMRAPs
     duration_seconds: isTime ? num(set.duration) : null,
     distance_m: isTime && set.distance !== "" ? Math.round(Number(set.distance) * 1000) : null
   };
