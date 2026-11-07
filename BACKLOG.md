@@ -4,12 +4,13 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Next up
 
+- [ ] **Security check-up.** Waiting on Mihir to run `schema_export.sql` in the SQL Editor and send the output. Then: audit every RLS policy, check queries for follower-visibility mistakes (like the team-result bug in #10), tighten Edge Function CORS, commit the schema.
 
-## Fixes and tidy-ups (found while setting up CLAUDE.md)
+## Fixes and tidy-ups
 
-- [ ] Snapshot the full database schema into the repo (`supabase db pull`). Only the Sept 2026 team migrations are committed; the original tables live only in the Dashboard.
-- [ ] The CORS origin on both Edge Functions is `*`. Tighten it to `https://myclubhouse.org`.
-- [ ] Audit that every table the app writes to has RLS policies covering every operation it performs.
+- [ ] Snapshot the full database schema into the repo (part of the security check-up).
+- [ ] The CORS origin on both Edge Functions is `*`. Tighten it to `https://myclubhouse.org` (part of the security check-up).
+- [ ] Audit that every table the app writes to has RLS policies covering every operation it performs (part of the security check-up).
 - [ ] Confirm whether the `players.aliases text[]` migration was ever run. It isn't in `supabase/migrations/`.
 
 ## Football
@@ -25,7 +26,8 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Golf
 
-- [ ] Multi-person scores
+- [ ] Multi-person scores and match play: record a match alongside the individual score, in four-ball, foursomes, scramble, three-ball and two-ball formats.
+- [ ] Scorecard upload loading screen, with the option to leave and come back later to review the read card.
 - [ ] Course retrieval
 - [ ] Hole length and tee colour
 
@@ -36,17 +38,21 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Social
 
+- [ ] The feed is getting long: filter by month, or load more as you scroll.
 - [ ] Sport grouping
 
 ## Stats and insights
 
+- [ ] "Year in sport": Spotify Wrapped-style screens.
 
 ## Profile
 
 - [ ] Sport-specific user attributes
+- [ ] Delete or cancel matches waiting to be logged on your profile.
 
 ## General
 
+- [ ] Easier "start an activity" button: today you scroll to the bottom; it should pop out and be more prominent.
 - [ ] Field validation
 - [ ] Entering data on behalf of others
 - [ ] Voice notes
@@ -56,7 +62,6 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 - [x] Likes, shown as 🍺 beers: beer button on Following cards with a count (tap again to take it back); your own cards show who sent one ("Harry, Priya and 1 other"). `likes` table: you can send a beer only for activities you can see and not your own.
 - [x] Golf handicap & Stableford: playing handicap per round (pre-filled from the last round or the scorecard; "+2" for plus handicaps), stroke index per hole read from the photo and saved per course, Stableford points live per hole, per nine and per round, stored with the round, on the detail page and in Insights (18-hole average and best).
-- [x] Likes (👏): clap button on Following cards with a count (tap again to remove); your own cards show who clapped ("Harry, Priya and 1 other"). `likes` table: you can clap only for activities you can see and not your own.
 - [x] Bigger & clearer mode, labelled "OAP" (Me → Appearance: Off / On / Match phone, default Match phone): larger type, spacing and tap targets, stronger contrast, sentence-case labels; feed cards cut to what/when/result with Open → detail page; Insights one stat per row with charts folded. Detail page now has Edit and Delete for every sport. Stat rows wrap (football cards used to run off the edge).
 - [x] Display names required: asked at onboarding, and once for existing accounts without one (pre-filled from their team-sheet name); can't be blanked on the Me screen. Until set, search falls back to the team-sheet name. One-off backfill: `supabase/scripts/2026-10-18_backfill_display_names.sql`.
 - [x] Football rating: 1–10 rating chips on the personal football form (log and edit), so games added from a team result or the backfill can be rated afterwards. Fixed team results skipping your personal record when a followed teammate already had one for that fixture. Football saves now roll back a half-failed save like golf/gym.
