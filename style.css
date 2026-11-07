@@ -677,3 +677,53 @@
 .month-head .num { color: var(--faint); }
 .show-older { margin-top: var(--s-2); }
 [data-size="clear"] .month-head { font: var(--t-card); text-transform: none; color: var(--text); }
+
+/* --- Gym rest timer: pinned to the bottom of the sets screen --- */
+.rest-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  max-width: var(--app-max); margin-inline: auto;
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: var(--s-3) var(--gutter) calc(var(--s-3) + env(safe-area-inset-bottom));
+  background: color-mix(in oklab, var(--surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--line-strong);
+}
+.rest-bar[hidden] { display: none; }
+.rest-bar__presets { display: flex; gap: 6px; flex: 1; justify-content: flex-end; }
+.rest-bar__presets .chip, .rest-bar .chip { min-height: 40px; padding-inline: 12px; }
+.rest-bar__time { font: var(--t-hero); letter-spacing: var(--track-hero); min-width: 3.4ch; }
+.rest-bar__track { flex: 1; height: 6px; border-radius: 3px; background: color-mix(in oklab, var(--text) 14%, transparent); overflow: hidden; }
+.rest-bar__track i { display: block; height: 100%; background: var(--chart-gym); transition: width 250ms linear; }
+.rest-bar[data-state="done"] { background: color-mix(in oklab, var(--chart-gym) 30%, var(--surface)); }
+.rest-bar__done { flex: 1; font: var(--t-value); }
+body.rest-bar-on #match-form { padding-bottom: 96px; }
+[data-size="clear"] .rest-bar { flex-wrap: wrap; }
+[data-size="clear"] .rest-bar__presets { flex-wrap: wrap; justify-content: flex-start; }
+
+/* --- Gym review --- */
+.review-title { font: var(--t-title); margin: 4px 0 0; }
+.review-warn {
+  margin: var(--s-3) 0 0; padding: var(--s-3);
+  border-radius: var(--r-field); border: 1px solid var(--negative);
+  background: color-mix(in oklab, var(--negative) 12%, transparent);
+  font: var(--t-body);
+}
+.review-warn p { margin: 0; }
+.review-warn p + p { margin-top: 4px; }
+.review-list { margin-top: var(--s-3); padding-top: 4px; padding-bottom: 4px; }
+.review-ex { padding: var(--s-3) 0; border-top: 1px solid var(--line); }
+.review-ex:first-child { border-top: 0; }
+.review-ex__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); }
+.review-ex__name { font: var(--t-value); }
+.review-ex__sets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.set-pill {
+  padding: 4px 10px; border-radius: var(--r-chip);
+  background: color-mix(in oklab, var(--text) 10%, transparent);
+  font: var(--t-body); font-variant-numeric: tabular-nums;
+}
+/* Gym set numbers: a row of fields that wraps in OAP mode, where three big
+   inputs side by side cut off values like "73.75". */
+.set-numbers { display: flex; gap: 8px; }
+.set-numbers .field { flex: 1 1 0; min-width: 0; }
+[data-size="clear"] .set-numbers { flex-wrap: wrap; }
+[data-size="clear"] .set-numbers .field { flex: 1 1 40% !important; } /* beats the inline flex:1 */
