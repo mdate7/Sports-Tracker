@@ -35,6 +35,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Gym
 
+- [ ] **Intervals as one block, not loose sets:** the workout timer currently saves its run as separate time sets, so an interval workout shows up as a list of individual sets on the session detail page. Store it as one interval block (work, rest, rounds and the exercises in it) and show it as a single "Intervals" card. Also let a round be reps-based (e.g. 10 burpees) instead of time-based. *Builds on the workout timer. Likely needs a way to group `gym_sets` rows (a block id, or a new blocks table with a follower select policy) plus a rest column, which also fixes rest only living in the set name: DB step.*
 
 ## New sports
 
