@@ -154,7 +154,7 @@ async function loadFollowingFeed() {
   if (!followingIds.size) return [];
   const { data, error } = await supabaseClient
     .from("matches")
-    .select("*, football_details(*), cricket_details(*), golf_details(*), golf_holes(*), gym_details(*), gym_sets(*)")
+    .select("*, football_details(*), cricket_details(*), golf_details(*), golf_holes(*), golf_practice(*), golf_practice_clubs(*), gym_details(*), gym_sets(*)")
     .in("user_id", [...followingIds])
     .order("date", { ascending: false })
     .limit(60);
@@ -172,6 +172,7 @@ function matchHeroHtml(match) {
     const cls = result === "Loss" ? "verdict--loss" : result === "Draw" ? "verdict--draw" : "";
     return `<span class="verdict ${cls}">${result.toUpperCase()}</span>`;
   }
+  if (match.golfKind === "practice") return practiceHeroHtml(match);
   if (match.sport === "golf") {
     return `<span class="delta num ${match.strokes > match.par ? "delta--neg" : ""}">${getGolfScoreVsPar(match)}</span>`;
   }
@@ -193,13 +194,13 @@ function friendMatchCardHtml(match) {
   // Opponent and course are already in the title, and "Your goals" reads
   // wrongly on someone else's card.
   const hidden = new Set(["date", "matchRating", "opponent", "courseName"]);
-  const stats = getFieldsForSport(match.sport)
+  const stats = fieldsForMatch(match)
     .filter(f => f.summary && !hidden.has(f.key))
     .map(f => `<div><span class="stat-value num">${escapeHtml(match[f.key])}</span><p class="label">${f.label.replace(/^Your /, "")}</p></div>`)
     .join("");
   const breakdown = match.sport === "golf" ? renderGolfDetailHtml(match)
     : match.sport === "gym" ? renderGymDetailHtml(match) : "";
-  const title = match.opponent || match.courseName || (match.sport === "gym" ? gymSessionTitle(match) : "");
+  const title = activityTitle(match);
   return `
     <div class="card friend-card" data-sport="${match.sport}">
       <div class="friend-card__who">

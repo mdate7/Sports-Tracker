@@ -829,3 +829,355 @@ function editGolfRound(match) {
   openScreen("Edit round");
   renderHoleStep();
 }
+// --- Practice sessions --------------------------------------------------------
+// A practice session is a golf `matches` row with a golf_practice row instead
+// of golf_details (and golf_practice_clubs instead of golf_holes). Clubs are
+// logged as you go, club + ball count, with no separate "plan" step. Each
+// club is its own row so the club distance tracker can hang carry distances
+// off it later.
+
+const PRACTICE_TYPES = [
+  { id: "range", label: "Driving range" },
+  { id: "short_game", label: "Short game" },
+  { id: "putting", label: "Putting" },
+  { id: "sim", label: "Simulator / net" }
+];
+
+const FULL_BAG = ["Driver", "3W", "5W", "Hybrid", "4i", "5i", "6i", "7i", "8i", "9i", "PW", "GW", "SW", "LW"];
+// The quick-add chips change with the type, so the clubs you'd actually use
+// are one tap away. Anything else can be typed in.
+const PRACTICE_CLUB_CHIPS = {
+  range: FULL_BAG,
+  sim: FULL_BAG,
+  short_game: ["9i", "PW", "GW", "SW", "LW"],
+  putting: ["Putter"]
+};
+
+const PRACTICE_BALL_STEP = 5;
+let golfPractice = null; // { type, focus, venue, totalBalls, clubs: [{ club, balls }], date, rating, notes, editingMatchId? }
+
+function practiceTypeLabel(id) {
+  return PRACTICE_TYPES.find(t => t.id === id)?.label || "Practice";
+}
+
+// What a practice session is called everywhere: its focus if it has one,
+// otherwise the type ("Driving range").
+function golfPracticeTitle(match) {
+  const focus = String(match.focus ?? "").trim();
+  return focus || practiceTypeLabel(match.practiceType ?? match.type);
+}
+
+// If any club has a ball count, the total is their sum; otherwise it's the
+// single number typed in (a "just hit a bucket" session).
+function practiceClubBalls(clubs) {
+  return (clubs || []).reduce((sum, c) => sum + (Number(c.balls) || 0), 0);
+}
+function practiceTotalBalls(session) {
+  const fromClubs = practiceClubBalls(session.clubs);
+  if (fromClubs) return fromClubs;
+  const typed = Number(session.totalBalls);
+  return Number.isFinite(typed) && typed > 0 ? typed : null;
+}
+
+function savePracticeProgress() {
+  // Edits aren't drafts: they come back from the database if abandoned.
+  if (golfPractice && !golfPractice.editingMatchId) {
+    localStorage.setItem("inProgressGolfPractice", JSON.stringify(golfPractice));
+  }
+}
+function clearPracticeProgress() {
+  localStorage.removeItem("inProgressGolfPractice");
+}
+
+function newGolfPractice() {
+  // Start from the type used last time: most people practise the same way.
+  const last = [...matches].filter(m => m.golfKind === "practice").sort((a, b) => b.date.localeCompare(a.date))[0];
+  return { type: last?.practiceType || "range", focus: "", venue: last?.venue || "", totalBalls: "", clubs: [], date: todayISODate(), rating: null, notes: "" };
+}
+
+function openGolfPractice() {
+  const saved = localStorage.getItem("inProgressGolfPractice");
+  if (saved && confirm("You have an unfinished practice session. Resume it?")) {
+    golfPractice = JSON.parse(saved);
+  } else {
+    clearPracticeProgress();
+    golfPractice = newGolfPractice();
+  }
+  openScreen("Log practice");
+  renderPracticeForm();
+}
+
+function resumeGolfPractice() {
+  const saved = localStorage.getItem("inProgressGolfPractice");
+  if (!saved) return;
+  golfPractice = JSON.parse(saved);
+  openScreen("Practice");
+  renderPracticeForm();
+}
+
+function editGolfPractice(match) {
+  golfPractice = {
+    editingMatchId: match.id,
+    type: match.practiceType || "range",
+    focus: match.focus || "",
+    venue: match.venue || "",
+    totalBalls: match.totalBalls ?? "",
+    clubs: (match.clubs || []).map(c => ({ club: c.club, balls: c.balls ?? "" })),
+    date: match.date,
+    rating: match.matchRating ?? null,
+    notes: match.notes || ""
+  };
+  openScreen("Edit practice");
+  renderPracticeForm();
+}
+
+function renderPracticeForm() {
+  const p = golfPractice;
+  const chips = PRACTICE_CLUB_CHIPS[p.type] || FULL_BAG;
+  const usedClubs = new Set(p.clubs.map(c => c.club));
+  const venues = [...new Set(matches.filter(m => m.golfKind === "practice" && m.venue).map(m => m.venue))];
+  const clubBalls = practiceClubBalls(p.clubs);
+
+  const clubRows = p.clubs.map((c, i) => `
+    <div class="practice-club">
+      <span class="practice-club__name">${escapeHtml(c.club)}</span>
+      <div class="stepper practice-club__stepper">
+        <button type="button" data-ball-step="-1" data-i="${i}" aria-label="${PRACTICE_BALL_STEP} fewer balls, ${escapeHtml(c.club)}">−</button>
+        <input type="text" inputmode="numeric" class="practice-club__balls" data-club-balls="${i}" value="${escapeHtml(c.balls)}" placeholder="0" aria-label="Balls hit with ${escapeHtml(c.club)}">
+        <button type="button" class="plus" data-ball-step="1" data-i="${i}" aria-label="${PRACTICE_BALL_STEP} more balls, ${escapeHtml(c.club)}">+</button>
+      </div>
+      <button type="button" class="btn btn--ghost btn--sm" data-remove-club="${i}" aria-label="Remove ${escapeHtml(c.club)}">✕</button>
+    </div>`).join("");
+
+  form.dataset.sport = "golf";
+  form.innerHTML = `
+    <div id="practice-root">
+      <p class="label">What kind of practice?</p>
+      <div class="chips" style="flex-wrap:wrap;margin-top:8px;" role="group" aria-label="Practice type">
+        ${PRACTICE_TYPES.map(t => `<button type="button" class="chip" data-sport="golf" data-practice-type="${t.id}" aria-pressed="${p.type === t.id}">${t.label}</button>`).join("")}
+      </div>
+
+      <div class="field" style="margin-top:16px;">
+        <label class="label" for="practice-focus">Focus (optional)</label>
+        <input type="text" id="practice-focus" value="${escapeHtml(p.focus)}" placeholder="e.g. Wedges inside 100">
+      </div>
+      <div class="field">
+        <label class="label" for="practice-venue">Where (optional)</label>
+        <input type="text" id="practice-venue" list="practice-venue-options" value="${escapeHtml(p.venue)}" placeholder="e.g. Chingford range">
+        <datalist id="practice-venue-options">${venues.map(v => `<option value="${escapeHtml(v)}">`).join("")}</datalist>
+      </div>
+
+      <p class="label" style="margin-top:8px;">Clubs hit</p>
+      <p style="font:var(--t-body);color:var(--muted);margin:4px 0 8px;">Tap a club to add it, then count the balls as you go.</p>
+      <div class="chips" style="flex-wrap:wrap;" role="group" aria-label="Add a club">
+        ${chips.map(c => `<button type="button" class="chip chip--sm" data-sport="golf" data-add-club="${escapeHtml(c)}" aria-pressed="${usedClubs.has(c)}">${escapeHtml(c)}</button>`).join("")}
+      </div>
+      <div class="practice-add-other">
+        <div class="field" style="flex:1;margin:0;">
+          <label class="label" for="practice-other-club">Other club</label>
+          <input type="text" id="practice-other-club" placeholder="e.g. 2i, 56°">
+        </div>
+        <button type="button" id="practice-other-add" class="btn btn--ghost btn--sm">Add</button>
+      </div>
+      ${clubRows ? `<div class="practice-clubs">${clubRows}</div>` : ""}
+
+      <div class="field" style="margin-top:16px;">
+        <label class="label" for="practice-total">Total balls</label>
+        ${clubBalls
+          ? `<p class="stat-value num" id="practice-total-out" style="margin:4px 0 0;">${clubBalls}</p>`
+          : `<input type="text" inputmode="numeric" id="practice-total" value="${escapeHtml(p.totalBalls)}" placeholder="e.g. 80">`}
+      </div>
+
+      <p class="label" style="margin-top:8px;">Rating <span style="text-transform:none;letter-spacing:0;">(optional, out of 10)</span></p>
+      <div class="chips rating-chips" role="group" aria-label="Rating out of 10">
+        ${Array.from({ length: 10 }, (_, i) => i + 1).map(n => `<button type="button" class="chip" data-sport="golf" data-practice-rating="${n}" aria-pressed="${Number(p.rating) === n}">${n}</button>`).join("")}
+      </div>
+
+      <div class="field" style="margin-top:16px;">
+        <label class="label" for="practice-date">Date</label>
+        <input type="date" id="practice-date" value="${escapeHtml(p.date)}" required>
+      </div>
+      <div class="field">
+        <label class="label" for="practice-notes">Notes (optional)</label>
+        <input type="text" id="practice-notes" value="${escapeHtml(p.notes)}" placeholder="What clicked, what to work on next time">
+      </div>
+      <button type="button" id="practice-save-btn" class="btn" style="margin-top:8px;">${p.editingMatchId ? "Save Changes" : "Save Practice"}</button>
+    </div>
+  `;
+
+  // Every listener hangs off #practice-root, which is brand new on each
+  // render, so re-rendering can never stack duplicate handlers.
+  const root = document.getElementById("practice-root");
+
+  root.addEventListener("click", (event) => {
+    const typeChip = event.target.closest("[data-practice-type]");
+    if (typeChip) { p.type = typeChip.dataset.practiceType; return rerender(); }
+
+    const addChip = event.target.closest("[data-add-club]");
+    if (addChip) { return addClub(addChip.dataset.addClub); }
+
+    const step = event.target.closest("[data-ball-step]");
+    if (step) {
+      const c = p.clubs[Number(step.dataset.i)];
+      const next = (Number(c.balls) || 0) + Number(step.dataset.ballStep) * PRACTICE_BALL_STEP;
+      c.balls = Math.max(0, next);
+      return rerender();
+    }
+
+    const remove = event.target.closest("[data-remove-club]");
+    if (remove) { p.clubs.splice(Number(remove.dataset.removeClub), 1); return rerender(); }
+
+    const rating = event.target.closest("[data-practice-rating]");
+    if (rating) {
+      const n = Number(rating.dataset.practiceRating);
+      p.rating = p.rating === n ? null : n; // tapping the chosen one again clears it
+      return rerender();
+    }
+
+    if (event.target.closest("#practice-other-add")) {
+      const input = document.getElementById("practice-other-club");
+      const name = input.value.trim();
+      if (name) addClub(name);
+      return;
+    }
+
+    if (event.target.closest("#practice-save-btn")) saveGolfPractice();
+  });
+
+  // Typing updates state without a re-render, so the keyboard stays put.
+  root.addEventListener("input", (event) => {
+    const t = event.target;
+    if (t.id === "practice-focus") p.focus = t.value;
+    else if (t.id === "practice-venue") p.venue = t.value;
+    else if (t.id === "practice-total") p.totalBalls = t.value.replace(/\D/g, "");
+    else if (t.id === "practice-date") p.date = t.value;
+    else if (t.id === "practice-notes") p.notes = t.value;
+    else if (t.dataset.clubBalls !== undefined) {
+      p.clubs[Number(t.dataset.clubBalls)].balls = t.value.replace(/\D/g, "");
+      const out = document.getElementById("practice-total-out");
+      // The total switches between a typed field and a live sum, which needs
+      // a re-render; once it's already a sum, just update the number.
+      if (out && practiceClubBalls(p.clubs)) out.textContent = practiceClubBalls(p.clubs);
+    }
+    savePracticeProgress();
+  });
+  // Changing a club's count to/from zero changes which total is shown.
+  root.addEventListener("change", (event) => {
+    if (event.target.dataset.clubBalls !== undefined) rerender();
+  });
+  document.getElementById("practice-other-club").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") { event.preventDefault(); document.getElementById("practice-other-add").click(); }
+  });
+
+  function addClub(name) {
+    const existing = p.clubs.findIndex(c => c.club.toLowerCase() === name.toLowerCase());
+    if (existing === -1) p.clubs.push({ club: name, balls: "" });
+    rerender();
+    const index = existing === -1 ? p.clubs.length - 1 : existing;
+    document.querySelector(`[data-club-balls="${index}"]`)?.focus();
+  }
+
+  function rerender() {
+    savePracticeProgress();
+    renderPracticeForm();
+  }
+}
+
+async function saveGolfPractice() {
+  const p = golfPractice;
+  const userId = await ensureSignedIn();
+  if (!userId) {
+    alert("Couldn't verify your session — try again.");
+    return;
+  }
+  if (!p.date) {
+    alert("Add a date for this session.");
+    return;
+  }
+
+  const clubs = p.clubs.filter(c => c.club.trim());
+  const detail = {
+    practice_type: p.type,
+    focus: p.focus.trim() || null,
+    venue: p.venue.trim() || null,
+    total_balls: practiceTotalBalls(p)
+  };
+  const matchFields = { date: p.date, match_rating: p.rating || null, notes: p.notes.trim() || null };
+  const clubRows = (matchId) => clubs.map((c, i) => ({
+    match_id: matchId, position: i + 1, club: c.club.trim(), balls: c.balls === "" ? null : Number(c.balls)
+  }));
+
+  if (p.editingMatchId) {
+    const matchId = p.editingMatchId;
+    const { error: matchError } = await supabaseClient.from("matches").update(matchFields).eq("id", matchId);
+    if (matchError) {
+      console.error("Failed to update practice:", matchError);
+      alert("Something went wrong updating this session — check the console.");
+      return;
+    }
+    const { error: detailError } = await supabaseClient.from("golf_practice").update(detail).eq("match_id", matchId);
+    if (detailError) {
+      console.error("Failed to update practice details:", detailError);
+      alert("The date and notes saved, but the practice details didn't. Try saving again.");
+      return;
+    }
+    // Replace the club list wholesale: simpler than diffing, and it's a handful of rows.
+    const { error: deleteError } = await supabaseClient.from("golf_practice_clubs").delete().eq("match_id", matchId);
+    const { error: clubsError } = deleteError || !clubs.length
+      ? { error: deleteError }
+      : await supabaseClient.from("golf_practice_clubs").insert(clubRows(matchId));
+    if (clubsError) {
+      console.error("Failed to update practice clubs:", clubsError);
+      alert("The session saved, but the club list couldn't be updated. Try saving again.");
+      return;
+    }
+  } else {
+    const { data: matchRow, error: matchError } = await supabaseClient
+      .from("matches")
+      .insert({ user_id: userId, sport: "golf", ...matchFields })
+      .select()
+      .single();
+    if (matchError) {
+      console.error("Failed to save practice:", matchError);
+      alert("Something went wrong saving this session — check the console.");
+      return;
+    }
+
+    const { error: detailError } = await supabaseClient.from("golf_practice").insert({ match_id: matchRow.id, ...detail });
+    const { error: clubsError } = detailError || !clubs.length
+      ? { error: null }
+      : await supabaseClient.from("golf_practice_clubs").insert(clubRows(matchRow.id));
+
+    // Same rule as rounds: never leave a matches row without its details.
+    // Undo the half-save and keep the draft so nothing typed is lost.
+    if (detailError || clubsError) {
+      console.error("Failed to save practice details:", detailError || clubsError);
+      await supabaseClient.from("matches").delete().eq("id", matchRow.id);
+      alert("Something went wrong saving this session, so nothing was saved. Everything you entered is still here; try again.");
+      return;
+    }
+    clearPracticeProgress();
+  }
+
+  golfPractice = null;
+  matches = await loadMatchesFromSupabase();
+  currentDetailMatchId = null;
+  renderView();
+  closeEntryScreen();
+}
+
+// The breakdown on the detail page and friends' cards: one line per club.
+function renderGolfPracticeDetailHtml(match) {
+  const clubs = match.clubs || [];
+  const most = clubs.reduce((b, c) => ((Number(c.balls) || 0) > (Number(b?.balls) || 0) ? c : b), null);
+  return `
+    <div class="stats" style="margin-top:12px;">
+      <div><span class="stat-value num">${clubs.length}</span><p class="label">Club${clubs.length === 1 ? "" : "s"}</p></div>
+      ${most && Number(most.balls) ? `<div><span class="stat-value" style="font-size:1rem;">${escapeHtml(most.club)}</span><p class="label">Most used</p></div>` : ""}
+    </div>
+    ${clubs.length ? `
+      <ul class="detail-list practice-club-list">
+        ${clubs.map(c => `<li><span>${escapeHtml(c.club)}</span><span class="num">${Number.isFinite(c.balls) ? `${c.balls} ball${c.balls === 1 ? "" : "s"}` : ""}</span></li>`).join("")}
+      </ul>` : ""}
+  `;
+}

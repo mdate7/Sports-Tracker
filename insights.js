@@ -269,9 +269,14 @@ function footballHtml(list) {
 }
 
 function golfHtml(list) {
-  const rounds = list.filter(m => Number.isFinite(m.strokes) && Number.isFinite(m.par) && m.par > 0)
+  // Practice sessions have no score, so they never enter round stats; they
+  // get their own tiles at the end of the section instead.
+  const practiceHtml = golfPracticeTilesHtml(list.filter(m => m.golfKind === "practice"));
+  const rounds = list.filter(m => m.golfKind !== "practice" && Number.isFinite(m.strokes) && Number.isFinite(m.par) && m.par > 0)
     .sort((a, b) => a.date.localeCompare(b.date));
-  if (!rounds.length) return "";
+  if (!rounds.length) {
+    return practiceHtml ? `<section class="insight-section" data-sport="golf"><p class="eyebrow">Golf</p>${practiceHtml}</section>` : "";
+  }
   const vs = (m) => m.strokes - m.par;
   const fmt = (v) => (v === 0 ? "E" : v > 0 ? `+${v}` : `${v}`);
   const best = rounds.reduce((b, m) => (vs(m) < vs(b) ? m : b));
@@ -301,7 +306,29 @@ function golfHtml(list) {
           ${tableView("Show as table", ["Date", "Course", "Score", "vs par"], [...recent].reverse().map(m => [shortDate(m.date), escapeHtml(m.courseName || ""), m.strokes, fmt(vs(m))]))}
         </div>` : ""}
       ${withHoles ? `<p class="insight-note">${birdies} birdie${birdies === 1 ? "" : "s"} or better across ${withHoles} round${withHoles === 1 ? "" : "s"} with hole-by-hole scores.</p>` : ""}
+      ${practiceHtml}
     </section>`;
+}
+
+// Practice: how often, how many balls, and which clubs get the work.
+function golfPracticeTilesHtml(sessions) {
+  if (!sessions.length) return "";
+  const thisMonth = monthKey(todayISODate());
+  const monthCount = sessions.filter(m => monthKey(m.date) === thisMonth).length;
+  const balls = sessions.reduce((s, m) => s + (Number.isFinite(m.totalBalls) ? m.totalBalls : 0), 0);
+  const byClub = new Map();
+  sessions.forEach(m => (m.clubs || []).forEach(c => {
+    const key = String(c.club || "").trim();
+    if (key) byClub.set(key, (byClub.get(key) || 0) + (Number(c.balls) || 0));
+  }));
+  const top = [...byClub.entries()].filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+  return `
+      <p class="label" style="margin-top:16px;">Practice</p>
+      <div class="stat-grid">
+        ${statTile("Sessions", sessions.length, `${monthCount} this month`)}
+        ${statTile("Balls hit", balls.toLocaleString("en-GB"))}
+      </div>
+      ${top.length ? `<p class="insight-note">Most practised: ${top.slice(0, 3).map(([club, n]) => `${escapeHtml(club)} (${n})`).join(", ")}.</p>` : ""}`;
 }
 
 // Stableford: 18-hole rounds only, so totals are comparable.
@@ -398,7 +425,7 @@ function renderInsights() {
   // activities, so they don't count towards streaks or totals either.
   const hasDetails = (m) =>
     m.sport === "gym" ? Array.isArray(m.sets)
-    : m.sport === "golf" ? m.strokes !== undefined
+    : m.sport === "golf" ? m.strokes !== undefined || m.golfKind === "practice"
     : m.sport === "football" || m.sport === "cricket" ? m.opponent !== undefined || m.goalsFor !== undefined || m.runsScored !== undefined
     : true;
   const all = matches.filter(m => typeof m.date === "string" && /^\d{4}-\d{2}-\d{2}/.test(m.date) && hasDetails(m));
