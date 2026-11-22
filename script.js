@@ -22,7 +22,7 @@ async function loadMatchesFromSupabase() {
 
   const { data, error } = await supabaseClient
     .from("matches")
-    .select("*, football_details(*), cricket_details(*), golf_details(*), golf_holes(*), gym_details(*), gym_sets(*)")
+    .select("*, football_details(*), cricket_details(*), golf_details(*), golf_holes(*), golf_practice(*), golf_practice_clubs(*), gym_details(*), gym_sets(*)")
     .eq("user_id", userId);
 
   if (error) {
@@ -77,10 +77,30 @@ function flattenMatchRow(row) {
     };
   }
 
+  // A golf match is a round (golf_details) or a practice session
+  // (golf_practice), never both. golf_practice is one-to-one with matches so
+  // it normally comes back as an object; the array check is belt and braces.
+  const practice = Array.isArray(row.golf_practice) ? row.golf_practice[0] : row.golf_practice;
+  if (row.sport === "golf" && practice) {
+    return {
+      ...base,
+      golfKind: "practice",
+      practiceType: practice.practice_type,
+      practiceTypeLabel: practiceTypeLabel(practice.practice_type),
+      focus: practice.focus || "",
+      venue: practice.venue || "",
+      totalBalls: practice.total_balls ?? null,
+      clubs: (row.golf_practice_clubs || [])
+        .sort((a, b) => a.position - b.position)
+        .map(c => ({ club: c.club, balls: c.balls ?? null }))
+    };
+  }
+
   if (row.sport === "golf" && row.golf_details) {
     const d = row.golf_details;
     return {
       ...base,
+      golfKind: "round",
       courseName: d.course_name,
       playedWith: d.played_with,
       strokes: d.strokes,
@@ -158,6 +178,13 @@ const sportFields = {
   ],
   gym: [
     { key: "typeLabel", label: "Session Type", type: "text", summary: true },
+  ],
+  // Not a sport of its own: golf matches with a golf_practice row use these
+  // instead of the round fields (see fieldsForMatch).
+  golfPractice: [
+    { key: "practiceTypeLabel", label: "Practice", type: "text", summary: true },
+    { key: "totalBalls", label: "Balls", type: "number", summary: true },
+    { key: "venue", label: "Where", type: "text" }
   ]
 };
 
@@ -237,12 +264,19 @@ function closeEntryScreen() {
   if (typeof closeGymTimer === "function") closeGymTimer();
   editingId = null;
   golfRound = null;
+  golfPractice = null;
   gymSession = null;
   activeSelectionId = null;
   closeScreen();
 }
 
-document.getElementById("screen-back-btn").addEventListener("click", closeEntryScreen);
+// Re-render on the way out so a draft left half-done (a round, a session, a
+// practice) shows its Resume card straight away, not only after a reload.
+document.getElementById("screen-back-btn").addEventListener("click", () => {
+  closeEntryScreen();
+  currentDetailMatchId = null;
+  renderView();
+});
 
 // How a stored field reads on cards: a plus handicap is stored as a negative
 // number but golfers write it "+2".
@@ -254,6 +288,18 @@ function fieldDisplay(f, match) {
 
 function getFieldsForSport(sport) {
   return [...commonFields, ...sportFields[sport]];
+}
+
+// Like getFieldsForSport, but for one activity: a golf practice session
+// shows practice fields, not course/strokes/par.
+function fieldsForMatch(match) {
+  return match.golfKind === "practice" ? getFieldsForSport("golfPractice") : getFieldsForSport(match.sport);
+}
+
+// The name shown after the sport on every card and the detail page.
+function activityTitle(match) {
+  if (match.golfKind === "practice") return golfPracticeTitle(match);
+  return match.opponent || match.courseName || (match.sport === "gym" ? gymSessionTitle(match) : "");
 }
 
 function getDistinctFieldValues(sport, key) {
@@ -347,6 +393,7 @@ function todayISODate() {
 }
 
 function renderGolfDetailHtml(match) {
+  if (match.golfKind === "practice") return renderGolfPracticeDetailHtml(match);
   if (!match.holes || match.holes.length === 0) return "";
   const birdies = match.holes.filter(h => h.strokes && h.par && h.strokes - h.par < 0).length;
   const pars = match.holes.filter(h => h.strokes && h.par && h.strokes - h.par === 0).length;
@@ -402,6 +449,13 @@ function renderGymDetailHtml(match) {
       ${focusAreas.length ? `<p class="label" style="margin-top:10px;">Focus areas</p><p class="stat-value" style="font-size:0.95rem;margin-top:2px;">${escapeHtml(focusAreas.join(", "))}</p>` : ""}
     ${groupsHtml}
   `;
+}
+
+// Practice leads with how many balls were hit; there's no score.
+function practiceHeroHtml(match) {
+  return Number.isFinite(match.totalBalls)
+    ? `<span class="delta num">${match.totalBalls} balls</span>`
+    : `<span class="delta">Practice</span>`;
 }
 
 function getGolfScoreVsPar(match) {
@@ -600,7 +654,7 @@ function renderMatch(match) {
   card.className = "card";
   card.dataset.sport = match.sport;
 
-  const fields = getFieldsForSport(match.sport);
+  const fields = fieldsForMatch(match);
   const summaryFields = fields.filter(f => f.summary);
   const detailFields = fields.filter(f => !f.summary);
 
@@ -622,6 +676,8 @@ function renderMatch(match) {
     const result = getFootballResult(match);
     const cls = result === "Loss" ? "verdict--loss" : result === "Draw" ? "verdict--draw" : "";
     hero = `<span class="verdict ${cls}">${result.toUpperCase()}</span>`;
+  } else if (match.golfKind === "practice") {
+    hero = practiceHeroHtml(match);
   } else if (match.sport === "golf") {
     const diff = getGolfScoreVsPar(match);
     const cls = match.strokes > match.par ? "delta--neg" : "";
@@ -636,7 +692,7 @@ function renderMatch(match) {
       : `<span class="delta num">${sets.length} set${sets.length === 1 ? "" : "s"}</span>`;
   }
 
-  const title = match.opponent || match.courseName || (match.sport === "gym" ? gymSessionTitle(match) : "");
+  const title = activityTitle(match);
 
   card.innerHTML = `
     <div class="card-head">
@@ -691,6 +747,23 @@ function renderInProgressCards() {
           <div>
             <p class="eyebrow">Golf · ${escapeHtml(round.courseName || "In progress")}</p>
             <p class="card-meta">Hole ${round.holeIndex + 1} of ${round.numHoles}</p>
+          </div>
+          <span class="chip" aria-pressed="true">Resume</span>
+        </div>
+      </div>
+    `;
+  }
+
+  const practiceSaved = localStorage.getItem("inProgressGolfPractice");
+  if (practiceSaved && (currentView === "all" || currentView === "golf")) {
+    const p = JSON.parse(practiceSaved);
+    const balls = practiceTotalBalls(p);
+    html += `
+      <div class="card" data-sport="golf" data-resume="golf-practice" style="cursor:pointer;">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Golf practice · ${escapeHtml(golfPracticeTitle(p))}</p>
+            <p class="card-meta">${balls ? `${balls} balls so far` : `${p.clubs.length} club${p.clubs.length === 1 ? "" : "s"} added`}</p>
           </div>
           <span class="chip" aria-pressed="true">Resume</span>
         </div>
@@ -809,7 +882,7 @@ function renderMatchDetailScreen() {
   const match = matches.find(m => m.id === currentDetailMatchId);
   if (!match) { renderView(); return; }
 
-  const fields = getFieldsForSport(match.sport);
+  const fields = fieldsForMatch(match);
   const summaryFields = fields.filter(f => f.summary);
 
   const statBlocks = summaryFields.map(f => `
@@ -821,12 +894,12 @@ function renderMatchDetailScreen() {
 
   const golfBreakdown = match.sport === "golf" ? renderGolfDetailHtml(match) : "";
   const gymBreakdown = match.sport === "gym" ? renderGymDetailHtml(match) : "";
-  const title = match.opponent || match.courseName || (match.sport === "gym" ? gymSessionTitle(match) : "");
+  const title = activityTitle(match);
   // Fields that aren't summary stats (notes, assists, position...), which the
   // feed card keeps behind "View details". Shown here in full.
   const extraRows = fields.filter(f => !f.summary && match[f.key] !== null && match[f.key] !== undefined && match[f.key] !== "")
     .map(f => `<li>${f.label}: ${escapeHtml(fieldDisplay(f, match))}</li>`).join("");
-  const editNoun = match.sport === "golf" ? "round" : match.sport === "gym" ? "session" : "match";
+  const editNoun = match.golfKind === "practice" ? "session" : match.sport === "golf" ? "round" : match.sport === "gym" ? "session" : "match";
   const editButton = `
     <div class="detail-actions">
       <button type="button" id="detail-edit-btn" class="btn btn--ghost btn--sm">Edit ${editNoun}</button>
@@ -863,7 +936,9 @@ function renderMatchDetailScreen() {
   });
 
   document.getElementById("detail-edit-btn")?.addEventListener("click", () => {
-    if (match.sport === "golf") {
+    if (match.golfKind === "practice") {
+      editGolfPractice(match);
+    } else if (match.sport === "golf") {
       editGolfRound(match);
     } else if (match.sport === "gym") {
       editGymSession(match);
@@ -950,6 +1025,9 @@ function resumeInProgress(sport) {
     setView("golf");
     openScreen("Resume round");
     renderHoleStep();
+  } else if (sport === "golf-practice") {
+    setView("golf");
+    resumeGolfPractice();
   } else if (sport === "gym") {
     const saved = localStorage.getItem("inProgressGymSession");
     if (!saved) return;
@@ -1013,6 +1091,15 @@ function openLogSheet() {
     <div class="sheet-sports">
       ${sports.map(s => `<button type="button" class="sheet-sport" data-sheet-sport="${s.id}" data-sport="${s.id}">
         <span aria-hidden="true">${s.icon}</span>${s.name}</button>`).join("")}
+    </div>
+    <p class="label" style="margin-top:18px;">Training</p>
+    <div class="sheet-list">
+      <button type="button" class="sheet-row" data-sheet-practice="golf" data-sport="golf">
+        <span class="sheet-row__icon" aria-hidden="true">⛳</span>
+        <span class="sheet-row__main"><span class="sheet-row__title">Golf practice</span>
+        <span class="label">Range, short game, putting, sim</span></span>
+        <span class="chip" aria-hidden="true">Log</span>
+      </button>
     </div>`;
   logSheetReturnFocus = document.activeElement;
   logSheet.hidden = false;
@@ -1034,6 +1121,12 @@ logSheet.addEventListener("click", (event) => {
     closeLogSheet();
     setView(sport.dataset.sheetSport);
     openSportForm(sport.dataset.sheetSport);
+    return;
+  }
+  if (event.target.closest("[data-sheet-practice]")) {
+    closeLogSheet();
+    setView("golf");
+    openGolfPractice();
     return;
   }
   const sel = event.target.closest("[data-sheet-selection]");
@@ -1059,6 +1152,7 @@ function startEdit(id) {
   // (existingMatch closure / golfRound.editingMatchId / gymSession.editingMatchId),
   // so editingId stays null for them, same as the detail-view edit button.
   if (match.sport === "football") { buildFootballForm(match); return; }
+  if (match.golfKind === "practice") { editGolfPractice(match); return; }
   if (match.sport === "golf") { editGolfRound(match); return; }
   if (match.sport === "gym") { editGymSession(match); return; }
 
@@ -1069,7 +1163,7 @@ function startEdit(id) {
 
 async function deleteMatch(id) {
   const match = matches.find(m => m.id === id);
-  const label = match.opponent || match.courseName || "this activity";
+  const label = activityTitle(match) || "this activity";
   const confirmed = confirm(`Delete ${label}? This can't be undone.`);
   if (!confirmed) return;
 

@@ -29,7 +29,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 - [ ] Multi-person scores and match play: record a match alongside the individual score, in four-ball, foursomes, scramble, three-ball and two-ball formats.
 - [ ] **Course search up front:** find the course before the round and fill in par and stroke index per hole, so nothing is typed by hand. Pick the tee colour, which sets the yardages, and SI where it differs by tee. *Needs a course data source (a golf course API, or build up our own `courses` table from scorecard photos), plus tee columns: DB step.* Replaces "Course retrieval" and "Hole length and tee colour".
-- [ ] **Practice sessions:** a new golf session type. Free practice (total balls) or planned (balls per club), plus a name or focus ("Wedges inside 100"), a rating and notes. *New tables: DB step.*
+- [x] **Practice sessions:** a new golf session type. Free practice (total balls) or planned (balls per club), plus a name or focus ("Wedges inside 100"), a rating and notes. *New tables: DB step.* Built: type (range / short game / putting / sim), focus, where, clubs with ball counts logged as you go, rating, notes; practice tiles in Insights.
 - [ ] **Club distance tracker:** record carry distances per club during a practice session to get an average for each club. Re-test every few months and chart the progress per club. Builds on practice sessions.
 - [ ] **Distance to the pin (GPS):** live yards to the green as you play, from the phone's location. *Trickier: needs green coordinates per hole (from a course data source, or tapped in once on a map and saved per course), the screen kept on, and battery care. Works in a web app over HTTPS.* Builds on course search.
 
