@@ -1585,6 +1585,19 @@ async function publishResult() {
     }
   }
 
+  // Upsert only adds and updates, so anyone taken out of the squad on "Edit
+  // result" kept their old row (and its apps, goals and votes). Remove every
+  // appearance for this game that isn't in the squad being published.
+  const keptIds = appearanceRows.map(r => r.player_id);
+  let removeQuery = supabaseClient.from("fixture_appearances").delete().eq("fixture_id", fixture.id);
+  if (keptIds.length) removeQuery = removeQuery.not("player_id", "in", `(${keptIds.join(",")})`);
+  const { error: removeError } = await removeQuery;
+  if (removeError) {
+    console.error("Failed to remove dropped players' appearances:", removeError);
+    if (statusEl) statusEl.textContent = "Result saved, but players taken out of the squad still show as playing. Publish again to retry.";
+    return;
+  }
+
   // An abandoned game isn't a result, so it doesn't go on anyone's record.
   if (resultDraft.goalsEdited) {
     const goalRows = (resultDraft.goalList || []).slice(0, resultDraft.goalsFor).map((g, i) => ({
