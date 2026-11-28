@@ -15,7 +15,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 ## Football
 
-- [ ] Persist an "Abandoned" result tag. Needs a `result_tag` column; Won/Drawn/Lost only survive because they're re-derived from the score.
+- [x] Persist an "Abandoned" result tag. Saved in `fixtures.result_tag`; abandoned games show on the results list but are left out of the record, form, runs and player stats, and aren't added to personal records. Needs a `result_tag` column; Won/Drawn/Lost only survive because they're re-derived from the score.
 - [ ] An Edge Function so "add to everyone's personal record" works for the whole squad. RLS on `matches` only lets a client write its own row.
 - [x] Team stats: All time view (season rail), home/away records, clean sheets, biggest win and heaviest defeat, record against each opponent (all time).
 - [x] Form tracking: current run ("Won 3 in a row", "Unbeaten in 5", "2 without a win"), most wins in a row and longest unbeaten run, per season or all time.
