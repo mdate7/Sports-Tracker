@@ -326,6 +326,16 @@
 .season-table td:first-child { font-weight: 600; }
 .season-table th + th, .season-table td + td { width: 3.25rem; }
 
+/* Form card: the current run reads as a headline, then the margins as two quiet lines. */
+.team-run { margin: 0 0 var(--s-2); font: var(--t-card); color: var(--sport); }
+.team-margins { margin-top: var(--s-3); padding-top: var(--s-3); border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--s-2); }
+.team-margins p { margin: 0; display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: var(--s-2); align-items: baseline; font: var(--t-body); color: var(--text); }
+.team-margins__score { font-weight: 700; margin-right: 2px; }
+.team-margins__when { color: var(--muted); }
+[data-size="clear"] .team-margins p { grid-template-columns: 1fr; gap: 2px; }
+.fixture-row[hidden] { display: none; }
+.h2h-table th:nth-child(3), .h2h-table td:nth-child(3) { width: 4.5rem; }
+
 .team-members summary { cursor: pointer; list-style: none; }
 .team-members summary::-webkit-details-marker { display: none; }
 .team-members summary::after { content: " ▾"; }
