@@ -17,8 +17,8 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 
 - [ ] Persist an "Abandoned" result tag. Needs a `result_tag` column; Won/Drawn/Lost only survive because they're re-derived from the score.
 - [ ] An Edge Function so "add to everyone's personal record" works for the whole squad. RLS on `matches` only lets a client write its own row.
-- [ ] Team stats
-- [ ] Form tracking
+- [x] Team stats: All time view (season rail), home/away records, clean sheets, biggest win and heaviest defeat, record against each opponent (all time).
+- [x] Form tracking: current run ("Won 3 in a row", "Unbeaten in 5", "2 without a win"), most wins in a row and longest unbeaten run, per season or all time.
 - [ ] League table
 - [ ] Team selection and formations
 - [ ] Goal-and-assist partnerships: "who sets up whom" stats (top pairs, per player and per season) on the team view. *DB step: result entry only saves per-player goal and assist totals, so which assist went with which goal is lost. Needs a `fixture_goals` table (fixture, scorer, assister, order) with team-member RLS. Only games entered after that will have the links.*

@@ -66,6 +66,80 @@ function fixtureOutcome(f) {
   if (f.goals_for < f.goals_against) return "L";
   return "D";
 }
+// W-D-L and goals for any list of fixtures (unplayed ones are ignored).
+function teamRecord(fixtures) {
+  const played = fixtures.filter(fixtureIsPlayed);
+  const rec = { p: played.length, w: 0, d: 0, l: 0, gf: 0, ga: 0, cleanSheets: 0 };
+  played.forEach(f => {
+    const o = fixtureOutcome(f);
+    if (o === "W") rec.w++; else if (o === "L") rec.l++; else rec.d++;
+    rec.gf += f.goals_for;
+    rec.ga += f.goals_against;
+    if (f.goals_against === 0) rec.cleanSheets++;
+  });
+  return rec;
+}
+
+// Runs over played games, oldest first: the run the team is on now, plus the
+// longest winning and unbeaten runs in the period.
+function teamRuns(playedOldestFirst) {
+  const outcomes = playedOldestFirst.map(fixtureOutcome);
+  const longest = (test) => {
+    let best = 0, cur = 0;
+    outcomes.forEach(o => { cur = test(o) ? cur + 1 : 0; best = Math.max(best, cur); });
+    return best;
+  };
+  const trailing = (test) => {
+    let n = 0;
+    for (let i = outcomes.length - 1; i >= 0 && test(outcomes[i]); i--) n++;
+    return n;
+  };
+  const wins = trailing(o => o === "W");
+  const unbeaten = trailing(o => o !== "L");
+  const losses = trailing(o => o === "L");
+  const winless = trailing(o => o !== "W");
+  const last = outcomes[outcomes.length - 1];
+
+  let current = "";
+  if (wins >= 2) current = `Won ${wins} in a row`;
+  else if (unbeaten >= 2) current = `Unbeaten in ${unbeaten}`;
+  else if (losses >= 2) current = `Lost ${losses} in a row`;
+  else if (winless >= 2) current = `${winless} without a win`;
+  else if (last) current = { W: "Won the last game", D: "Drew the last game", L: "Lost the last game" }[last];
+
+  return { current, bestWins: longest(o => o === "W"), bestUnbeaten: longest(o => o !== "L") };
+}
+
+// The game with the widest margin in the given direction ("W" or "L").
+// Ties go to the most goals scored (wins) or conceded (defeats).
+function widestMargin(fixtures, outcome) {
+  const pool = fixtures.filter(f => fixtureOutcome(f) === outcome);
+  const sign = outcome === "W" ? 1 : -1;
+  return pool.sort((x, y) =>
+    sign * ((y.goals_for - y.goals_against) - (x.goals_for - x.goals_against)) ||
+    (outcome === "W" ? y.goals_for - x.goals_for : y.goals_against - x.goals_against)
+  )[0] || null;
+}
+
+// Record against each opponent, most-played first. Games with no opponent
+// recorded (some first-season backfills) are left out rather than lumped together.
+function headToHead(fixtures) {
+  const byOpp = new Map();
+  fixtures.filter(f => fixtureIsPlayed(f) && f.opponent).forEach(f => {
+    const key = f.opponent.trim().toLowerCase();
+    const row = byOpp.get(key) || { name: f.opponent.trim(), games: [] };
+    row.games.push(f);
+    byOpp.set(key, row);
+  });
+  return [...byOpp.values()]
+    .map(row => ({ name: row.name, ...teamRecord(row.games) }))
+    .sort((x, y) => y.p - x.p || (y.w - y.l) - (x.w - x.l) || x.name.localeCompare(y.name));
+}
+
+function recordText(rec) {
+  return `${rec.w}–${rec.d}–${rec.l}`;
+}
+
 function opponentName(f) {
   return f.opponent ? escapeHtml(f.opponent) : `<span style="color:var(--muted);">Unknown opponent</span>`;
 }
@@ -127,7 +201,10 @@ async function renderTeamDetail() {
   const next = upcoming[0];
 
   const seasons = [...new Set(past.map(f => seasonStartYear(f.date)))].sort((x, y) => y - x);
-  if (teamViewSeasonTeamId !== team.id || !seasons.includes(teamViewSeason)) {
+  // "All time" only earns a chip once there's more than one season to add up.
+  const showAllTime = seasons.length > 1;
+  const validSeason = seasons.includes(teamViewSeason) || (showAllTime && teamViewSeason === "all");
+  if (teamViewSeasonTeamId !== team.id || !validSeason) {
     teamViewSeason = seasons[0] ?? null;
     teamViewSeasonTeamId = team.id;
   }
@@ -170,6 +247,7 @@ async function renderTeamDetail() {
       <p class="label section-label">Seasons</p>
       <div class="rail" id="season-rail" style="padding-bottom:0;">
         ${seasons.map(y => `<button type="button" class="chip" data-season="${y}" aria-pressed="${y === teamViewSeason}">${seasonLabel(y)}</button>`).join("")}
+        ${showAllTime ? `<button type="button" class="chip" data-season="all" aria-pressed="${teamViewSeason === "all"}">All time</button>` : ""}
       </div>
       <div id="season-body"></div>
     ` : ""}
@@ -193,7 +271,7 @@ async function renderTeamDetail() {
     document.getElementById("season-rail").addEventListener("click", (event) => {
       const chip = event.target.closest("[data-season]");
       if (!chip) return;
-      teamViewSeason = Number(chip.dataset.season);
+      teamViewSeason = chip.dataset.season === "all" ? "all" : Number(chip.dataset.season);
       document.querySelectorAll("#season-rail .chip").forEach(c => c.setAttribute("aria-pressed", c === chip ? "true" : "false"));
       renderSeasonBody(team, past);
     });
@@ -235,19 +313,50 @@ async function renderSeasonBody(team, past) {
   const body = document.getElementById("season-body");
   if (!body) return;
   const season = teamViewSeason;
-  const fixtures = past.filter(f => seasonStartYear(f.date) === season); // newest first
+  const allTime = season === "all";
+  // Newest first. Sorted here rather than trusting the query order, because
+  // the form strip and runs depend on it.
+  const fixtures = (allTime ? past : past.filter(f => seasonStartYear(f.date) === season))
+    .slice().sort((x, y) => y.date.localeCompare(x.date));
   const played = fixtures.filter(fixtureIsPlayed);
-  const w = played.filter(f => fixtureOutcome(f) === "W").length;
-  const d = played.filter(f => fixtureOutcome(f) === "D").length;
-  const l = played.filter(f => fixtureOutcome(f) === "L").length;
-  const gf = played.reduce((sum, f) => sum + f.goals_for, 0);
-  const ga = played.reduce((sum, f) => sum + f.goals_against, 0);
+  const { w, d, l, gf, ga, cleanSheets } = teamRecord(played);
   const form = played.slice(0, 5).reverse(); // oldest → newest, reading left to right
+  const periodLabel = allTime ? "All time" : `${seasonLabel(season)} season`;
 
-  const resultRows = fixtures.map(f => {
+  const home = teamRecord(played.filter(f => f.is_home));
+  const away = teamRecord(played.filter(f => !f.is_home));
+  const runs = teamRuns([...played].reverse());
+  const bigWin = widestMargin(played, "W");
+  const bigLoss = widestMargin(played, "L");
+  const marginLine = (f) => f
+    ? `<span><span class="num team-margins__score">${f.goals_for}–${f.goals_against}</span> v ${f.opponent ? escapeHtml(f.opponent) : "unknown opponent"}${allTime ? ` <span class="team-margins__when">· ${seasonLabel(seasonStartYear(f.date))}</span>` : ""}</span>`
+    : `<span class="team-margins__when">None yet</span>`;
+
+  const h2h = allTime ? headToHead(played) : [];
+  const h2hHtml = h2h.length ? `
+    <p class="label section-label">Opponents</p>
+    <div class="card">
+      <table class="season-table h2h-table">
+        <thead><tr><th>Opponent</th><th>P</th><th>W–D–L</th><th>GD</th></tr></thead>
+        <tbody>
+          ${h2h.map(o => `
+            <tr>
+              <td>${escapeHtml(o.name)}</td>
+              <td class="num">${o.p}</td>
+              <td class="num">${recordText(o)}</td>
+              <td class="num">${o.gf - o.ga > 0 ? "+" : ""}${o.gf - o.ga}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>` : "";
+
+  // All time can run to a hundred-odd games, so it opens on the latest 10.
+  const RESULTS_PREVIEW = 10;
+  const resultRows = fixtures.map((f, i) => {
     const outcome = fixtureOutcome(f);
     return `
-      <button type="button" class="fixture-row fixture-row--result" data-add-result-fixture="${f.id}">
+      <button type="button" class="fixture-row fixture-row--result" data-add-result-fixture="${f.id}" ${allTime && i >= RESULTS_PREVIEW ? "hidden" : ""}>
         <span class="form-pip" data-outcome="${outcome || "none"}">${outcome || "–"}</span>
         <span class="fixture-row__main">
           <span class="fixture-row__opp">${opponentName(f)} <span class="label">${f.is_home ? "H" : "A"}</span></span>
@@ -261,7 +370,7 @@ async function renderSeasonBody(team, past) {
   body.innerHTML = `
     <div class="card" data-sport="${team.sport}">
       <div class="card-head">
-        <p class="label">${seasonLabel(season)} season</p>
+        <p class="label">${periodLabel}</p>
         <div class="form-strip" aria-label="Last ${form.length} results">
           ${form.map(f => `<span class="form-pip" data-outcome="${fixtureOutcome(f)}">${fixtureOutcome(f)}</span>`).join("")}
         </div>
@@ -274,12 +383,39 @@ async function renderSeasonBody(team, past) {
       </div>
     </div>
 
+    ${played.length ? `
+    <p class="label section-label">Form</p>
+    <div class="card" data-sport="${team.sport}">
+      <p class="team-run">${runs.current}</p>
+      <div class="stats">
+        <div><span class="stat-value num">${runs.bestWins}</span><p class="label">Most wins in a row</p></div>
+        <div><span class="stat-value num">${runs.bestUnbeaten}</span><p class="label">Longest unbeaten</p></div>
+      </div>
+      <div class="stats">
+        <div><span class="stat-value num">${recordText(home)}</span><p class="label">Home (${home.p})</p></div>
+        <div><span class="stat-value num">${recordText(away)}</span><p class="label">Away (${away.p})</p></div>
+        <div><span class="stat-value num">${cleanSheets}</span><p class="label">Clean sheets</p></div>
+      </div>
+      <div class="team-margins">
+        <p><span class="label">Biggest win</span> ${marginLine(bigWin)}</p>
+        <p><span class="label">Heaviest defeat</span> ${marginLine(bigLoss)}</p>
+      </div>
+    </div>` : ""}
+
     <p class="label section-label">Results</p>
-    <div class="card" style="padding-top:4px;padding-bottom:4px;">${resultRows}</div>
+    <div class="card" id="season-results" style="padding-top:4px;padding-bottom:4px;">${resultRows}</div>
+    ${allTime && fixtures.length > RESULTS_PREVIEW ? `<button type="button" id="show-all-results" class="btn btn--ghost btn--sm">Show all ${fixtures.length} results</button>` : ""}
 
     <p class="label section-label">Players</p>
     <div class="card" id="season-stats"><p class="label">Loading…</p></div>
+
+    ${h2hHtml}
   `;
+
+  document.getElementById("show-all-results")?.addEventListener("click", (event) => {
+    body.querySelectorAll("#season-results [hidden]").forEach(row => row.removeAttribute("hidden"));
+    event.currentTarget.remove();
+  });
 
   const stats = await loadSeasonPlayerStats(team, fixtures);
   // The person may have switched season while this was loading.
