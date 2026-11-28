@@ -21,7 +21,7 @@ The running to-do list for The Clubhouse. Tick items off (or delete them) in the
 - [x] Form tracking: current run ("Won 3 in a row", "Unbeaten in 5", "2 without a win"), most wins in a row and longest unbeaten run, per season or all time.
 - [ ] League table
 - [ ] Team selection and formations
-- [ ] Goal-and-assist partnerships: "who sets up whom" stats (top pairs, per player and per season) on the team view. *DB step: result entry only saves per-player goal and assist totals, so which assist went with which goal is lost. Needs a `fixture_goals` table (fixture, scorer, assister, order) with team-member RLS. Only games entered after that will have the links.*
+- [x] Goal-and-assist partnerships (built: `fixture_goals` table, saved on publish, restored on Edit result; top pairs per season and all time on the team view): "who sets up whom" stats (top pairs, per player and per season) on the team view. *DB step: result entry only saves per-player goal and assist totals, so which assist went with which goal is lost. Needs a `fixture_goals` table (fixture, scorer, assister, order) with team-member RLS. Only games entered after that will have the links.*
 - [ ] Comms
 - [ ] Fill in opponents for the first-season backfilled games, if anyone remembers them.
 

@@ -338,6 +338,13 @@
 .fixture-row[hidden] { display: none; }
 .h2h-table th:nth-child(3), .h2h-table td:nth-child(3) { width: 4.5rem; }
 
+/* Partnerships: "Assister → Scorer" with the count on the right. */
+.partner-list { list-style: none; margin: 0; padding: 0; }
+.partner-list li { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-3); padding: 7px 0; border-top: 1px solid var(--line); font: var(--t-body); color: var(--text); }
+.partner-list li:first-child { border-top: 0; }
+.partner-list__arrow { color: var(--sport); margin: 0 2px; }
+.partner-list__count { font-weight: 700; }
+
 .team-members summary { cursor: pointer; list-style: none; }
 .team-members summary::-webkit-details-marker { display: none; }
 .team-members summary::after { content: " ▾"; }

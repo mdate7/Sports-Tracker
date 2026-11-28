@@ -193,12 +193,49 @@ async function loadSeasonPlayerStats(team, fixtures) {
   return stats;
 }
 
+// Who sets up whom: assister → scorer pairs from fixture_goals for the given
+// games. Returns null if it couldn't load (e.g. before the migration), so the
+// section can quietly stay hidden.
+const partnershipCache = new Map();
+async function loadPartnerships(team, fixtures) {
+  const ids = fixtures.filter(fixtureCounts).map(f => f.id);
+  const key = `${team.id}:${ids.join(",")}`;
+  if (partnershipCache.has(key)) return partnershipCache.get(key);
+  if (!ids.length) return { pairs: [], linkedGames: 0 };
+
+  const [{ data: goals, error: goalsError }, { data: players, error: playersError }] = await Promise.all([
+    supabaseClient.from("fixture_goals").select("fixture_id, scorer_player_id, assist_player_id, own_goal").in("fixture_id", ids),
+    supabaseClient.from("players").select("id, display_name").eq("team_id", team.id)
+  ]);
+  if (goalsError || playersError) {
+    console.error("Failed to load partnerships:", goalsError || playersError);
+    return null;
+  }
+  const names = new Map((players || []).map(p => [p.id, p.display_name]));
+  const byPair = new Map();
+  (goals || []).forEach(g => {
+    if (g.own_goal || !g.scorer_player_id || !g.assist_player_id) return;
+    const k = `${g.assist_player_id}>${g.scorer_player_id}`;
+    byPair.set(k, (byPair.get(k) || 0) + 1);
+  });
+  const pairs = [...byPair.entries()]
+    .map(([k, count]) => {
+      const [assistId, scorerId] = k.split(">");
+      return { assister: names.get(assistId) || "Unknown player", scorer: names.get(scorerId) || "Unknown player", count };
+    })
+    .sort((x, y) => y.count - x.count || x.assister.localeCompare(y.assister));
+  const result = { pairs, linkedGames: new Set((goals || []).map(g => g.fixture_id)).size };
+  partnershipCache.set(key, result);
+  return result;
+}
+
 async function renderTeamDetail() {
   const team = await loadTeamDetail(currentTeamId);
   if (!team) return;
   // Results may have just been edited, so start every visit with fresh stats;
   // the cache only exists to make flicking between seasons instant.
   seasonStatsCache.clear();
+  partnershipCache.clear();
   // `team` is re-fetched on every render, so the permanent delegated listener
   // for fixture buttons reads it from here rather than from a stale closure.
   currentTeamDetail = team;
@@ -419,6 +456,8 @@ async function renderSeasonBody(team, past) {
     <p class="label section-label">Players</p>
     <div class="card" id="season-stats"><p class="label">Loading…</p></div>
 
+    <div id="season-partnerships"></div>
+
     ${h2hHtml}
   `;
 
@@ -426,6 +465,8 @@ async function renderSeasonBody(team, past) {
     body.querySelectorAll("#season-results [hidden]").forEach(row => row.removeAttribute("hidden"));
     event.currentTarget.remove();
   });
+
+  renderPartnerships(team, fixtures, season, played.length);
 
   const stats = await loadSeasonPlayerStats(team, fixtures);
   // The person may have switched season while this was loading.
@@ -455,6 +496,33 @@ async function renderSeasonBody(team, past) {
         `).join("")}
       </tbody>
     </table>
+  `;
+}
+
+const PARTNERSHIPS_SHOWN = 8;
+async function renderPartnerships(team, fixtures, season, playedCount) {
+  const data = await loadPartnerships(team, fixtures);
+  if (season !== teamViewSeason) return; // switched season while loading
+  const el = document.getElementById("season-partnerships");
+  if (!el || data === null || !playedCount) return;
+
+  const coverage = data.linkedGames < playedCount
+    ? `<p class="insight-note" style="margin-top:8px;">From ${data.linkedGames} of ${playedCount} games: only results entered goal by goal since this was added link each assist to its goal.</p>`
+    : "";
+  el.innerHTML = `
+    <p class="label section-label">Partnerships</p>
+    <div class="card" data-sport="${team.sport}">
+      ${data.pairs.length ? `
+        <ul class="partner-list">
+          ${data.pairs.slice(0, PARTNERSHIPS_SHOWN).map(p => `
+            <li>
+              <span class="partner-list__names">${escapeHtml(p.assister)} <span class="partner-list__arrow" aria-label="set up">→</span> ${escapeHtml(p.scorer)}</span>
+              <span class="num partner-list__count">${p.count}</span>
+            </li>`).join("")}
+        </ul>
+        ${coverage}
+      ` : `<p class="empty-state" style="padding:8px;">No linked goals yet. Pick the scorer and assist for each goal when entering a result, and who sets up whom shows here.</p>`}
+    </div>
   `;
 }
 
@@ -1048,13 +1116,15 @@ let resultDraft = null;
 //   motmPlayerId, dotdPlayerId, addToMyRecord }
 
 async function renderAddResultScreen(fixture, team) {
-  const [sheet, players, { data: existingAppearances, error: appearancesError }, usage] = await Promise.all([
+  const [sheet, players, { data: existingAppearances, error: appearancesError }, usage, { data: savedGoals, error: goalsError }] = await Promise.all([
     loadOrCreateTeamSheet(fixture.id),
     ensurePlayersForTeam(team.id, team.members),
     supabaseClient.from("fixture_appearances").select("*").eq("fixture_id", fixture.id),
-    loadSquadUsage(team.id)
+    loadSquadUsage(team.id),
+    supabaseClient.from("fixture_goals").select("*").eq("fixture_id", fixture.id)
   ]);
   if (appearancesError) console.error("Failed to load existing appearances:", appearancesError);
+  if (goalsError) console.error("Failed to load saved goals:", goalsError);
 
   let selectionMap = {};
   if (sheet) {
@@ -1107,7 +1177,16 @@ async function renderAddResultScreen(fixture, team) {
     kit: fixture.kit || "",
     motmPlayerId,
     dotdPlayerId,
-    addToMyRecord: true
+    addToMyRecord: true,
+    // The saved goal-by-goal list, when there is one, so "Edit result" shows
+    // exactly who set up whom. Without it the list is rebuilt from totals.
+    goalList: (savedGoals || []).length
+      ? [...savedGoals].sort((x, y) => x.position - y.position).map(g => ({
+          scorerId: g.own_goal ? "og" : (g.scorer_player_id || ""),
+          assistId: g.assist_player_id || ""
+        }))
+      : undefined,
+    goalsEdited: false
   };
 
   renderResultScoreStep();
@@ -1221,9 +1300,10 @@ function renderResultScoreStep() {
 }
 
 // Goals are entered in order (Goal 1 → scorer, assister) rather than as
-// per-player counters against the whole squad. Only per-player totals are
-// stored, so on "Edit result" the list is rebuilt from those totals: every
-// count survives, but which assist went with which goal may not.
+// per-player counters against the whole squad. Results published since
+// fixture_goals existed restore their exact list; older ones are rebuilt here
+// from per-player totals: every count survives, but which assist went with
+// which goal may not.
 function buildGoalListFromSquad() {
   const scorers = [];
   const assisters = [];
@@ -1249,6 +1329,9 @@ function applyGoalListToSquad() {
 }
 
 function renderResultEventsStep() {
+  // Only write fixture_goals for results that went through this step, so a
+  // "Save just the score" never overwrites a goal list with a guess.
+  resultDraft.goalsEdited = true;
   const squadIn = resultDraft.squad.filter(p => p.inSquad);
   const squadIds = new Set(squadIn.map(p => p.playerId));
 
@@ -1503,6 +1586,26 @@ async function publishResult() {
   }
 
   // An abandoned game isn't a result, so it doesn't go on anyone's record.
+  if (resultDraft.goalsEdited) {
+    const goalRows = (resultDraft.goalList || []).slice(0, resultDraft.goalsFor).map((g, i) => ({
+      fixture_id: fixture.id,
+      position: i + 1,
+      scorer_player_id: g.scorerId && g.scorerId !== "og" ? g.scorerId : null,
+      assist_player_id: g.scorerId !== "og" && g.assistId ? g.assistId : null,
+      own_goal: g.scorerId === "og"
+    }));
+    // Replace rather than diff: it's a handful of rows.
+    const { error: clearError } = await supabaseClient.from("fixture_goals").delete().eq("fixture_id", fixture.id);
+    const { error: goalsError } = clearError || !goalRows.length
+      ? { error: clearError }
+      : await supabaseClient.from("fixture_goals").insert(goalRows);
+    if (goalsError) {
+      console.error("Failed to save goal list:", goalsError);
+      if (statusEl) statusEl.textContent = "Result and appearances saved, but the goal-by-goal list didn't. Publish again to retry.";
+      return;
+    }
+  }
+
   if (resultDraft.addToMyRecord && resultDraft.resultTag !== "abandoned") {
     const mine = squad.find(p => p.userId === userId && p.inSquad);
     if (mine) {
