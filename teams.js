@@ -60,15 +60,19 @@ function formatFixtureDate(isoDate, withYear = false) {
 function fixtureIsPlayed(f) {
   return f.goals_for !== null && f.goals_for !== undefined;
 }
+// "A" for abandoned. A tag picked on the result screen wins over the score
+// (e.g. a game awarded to one side); with no tag it comes from the score.
+const OUTCOME_BY_TAG = { won: "W", drawn: "D", lost: "L", abandoned: "A" };
 function fixtureOutcome(f) {
   if (!fixtureIsPlayed(f)) return null;
+  if (OUTCOME_BY_TAG[f.result_tag]) return OUTCOME_BY_TAG[f.result_tag];
   if (f.goals_for > f.goals_against) return "W";
   if (f.goals_for < f.goals_against) return "L";
   return "D";
 }
 // W-D-L and goals for any list of fixtures (unplayed ones are ignored).
 function teamRecord(fixtures) {
-  const played = fixtures.filter(fixtureIsPlayed);
+  const played = fixtures.filter(fixtureCounts);
   const rec = { p: played.length, w: 0, d: 0, l: 0, gf: 0, ga: 0, cleanSheets: 0 };
   played.forEach(f => {
     const o = fixtureOutcome(f);
@@ -125,7 +129,7 @@ function widestMargin(fixtures, outcome) {
 // recorded (some first-season backfills) are left out rather than lumped together.
 function headToHead(fixtures) {
   const byOpp = new Map();
-  fixtures.filter(f => fixtureIsPlayed(f) && f.opponent).forEach(f => {
+  fixtures.filter(f => fixtureCounts(f) && f.opponent).forEach(f => {
     const key = f.opponent.trim().toLowerCase();
     const row = byOpp.get(key) || { name: f.opponent.trim(), games: [] };
     row.games.push(f);
@@ -138,6 +142,12 @@ function headToHead(fixtures) {
 
 function recordText(rec) {
   return `${rec.w}–${rec.d}–${rec.l}`;
+}
+
+// Played and counts: abandoned games keep their score on the results list
+// but stay out of the record, form, runs and player stats.
+function fixtureCounts(f) {
+  return fixtureIsPlayed(f) && fixtureOutcome(f) !== "A";
 }
 
 function opponentName(f) {
@@ -154,7 +164,7 @@ async function loadSeasonPlayerStats(team, fixtures) {
   const key = `${team.id}:${fixtures.map(f => f.id).join(",")}`;
   if (seasonStatsCache.has(key)) return seasonStatsCache.get(key);
 
-  const ids = fixtures.filter(fixtureIsPlayed).map(f => f.id);
+  const ids = fixtures.filter(fixtureCounts).map(f => f.id);
   if (!ids.length) return [];
   const [{ data: players, error: playersError }, { data: apps, error: appsError }] = await Promise.all([
     supabaseClient.from("players").select("id, display_name").eq("team_id", team.id),
@@ -318,7 +328,7 @@ async function renderSeasonBody(team, past) {
   // the form strip and runs depend on it.
   const fixtures = (allTime ? past : past.filter(f => seasonStartYear(f.date) === season))
     .slice().sort((x, y) => y.date.localeCompare(x.date));
-  const played = fixtures.filter(fixtureIsPlayed);
+  const played = fixtures.filter(fixtureCounts);
   const { w, d, l, gf, ga, cleanSheets } = teamRecord(played);
   const form = played.slice(0, 5).reverse(); // oldest → newest, reading left to right
   const periodLabel = allTime ? "All time" : `${seasonLabel(season)} season`;
@@ -362,7 +372,7 @@ async function renderSeasonBody(team, past) {
           <span class="fixture-row__opp">${opponentName(f)} <span class="label">${f.is_home ? "H" : "A"}</span></span>
           <span class="label">${formatFixtureDate(f.date, true)}</span>
         </span>
-        <span class="fixture-row__score num">${outcome ? `${f.goals_for}–${f.goals_against}` : `<span class="label">Add result</span>`}</span>
+        <span class="fixture-row__score num">${outcome ? `${f.goals_for}–${f.goals_against}${outcome === "A" ? `<span class="label fixture-row__tag">Abandoned</span>` : ""}` : `<span class="label">Add result</span>`}</span>
       </button>
     `;
   }).join("");
@@ -1089,7 +1099,10 @@ async function renderAddResultScreen(fixture, team) {
     fixture, team, squad, usage,
     goalsFor: fixture.goals_for ?? 0,
     goalsAgainst: fixture.goals_against ?? 0,
-    resultTag: null,
+    resultTag: fixture.result_tag || null,
+    // A saved tag that doesn't match the score was picked by hand, so score
+    // changes mustn't overwrite it. Same once someone taps a tag chip.
+    tagLocked: !!fixture.result_tag && fixture.result_tag !== tagForScore(fixture.goals_for ?? 0, fixture.goals_against ?? 0),
     venue: fixture.venue || "",
     kit: fixture.kit || "",
     motmPlayerId,
@@ -1100,11 +1113,13 @@ async function renderAddResultScreen(fixture, team) {
   renderResultScoreStep();
 }
 
-function resultTagFromScore() {
-  const { goalsFor, goalsAgainst } = resultDraft;
+function tagForScore(goalsFor, goalsAgainst) {
   if (goalsFor > goalsAgainst) return "won";
   if (goalsFor < goalsAgainst) return "lost";
   return "drawn";
+}
+function resultTagFromScore() {
+  return tagForScore(resultDraft.goalsFor, resultDraft.goalsAgainst);
 }
 
 function renderResultScoreStep() {
@@ -1162,21 +1177,23 @@ function renderResultScoreStep() {
 
   document.getElementById("result-back-btn").addEventListener("click", () => { resultDraft = null; renderTeamDetail(); });
 
-  let autoTag = true;
+  // Lives on the draft (not a local) so a hand-picked tag survives going
+  // forward to goals and back again.
+  const autoTag = () => !resultDraft.tagLocked;
   function syncTag(newTag) {
     resultDraft.resultTag = newTag;
     document.querySelectorAll("#result-tag-chips .chip").forEach(c => c.setAttribute("aria-pressed", c.dataset.tag === newTag ? "true" : "false"));
   }
 
-  document.getElementById("gf-minus").addEventListener("click", () => { resultDraft.goalsFor = Math.max(0, resultDraft.goalsFor - 1); document.getElementById("gf-output").textContent = resultDraft.goalsFor; if (autoTag) syncTag(resultTagFromScore()); });
-  document.getElementById("gf-plus").addEventListener("click", () => { resultDraft.goalsFor += 1; document.getElementById("gf-output").textContent = resultDraft.goalsFor; if (autoTag) syncTag(resultTagFromScore()); });
-  document.getElementById("ga-minus").addEventListener("click", () => { resultDraft.goalsAgainst = Math.max(0, resultDraft.goalsAgainst - 1); document.getElementById("ga-output").textContent = resultDraft.goalsAgainst; if (autoTag) syncTag(resultTagFromScore()); });
-  document.getElementById("ga-plus").addEventListener("click", () => { resultDraft.goalsAgainst += 1; document.getElementById("ga-output").textContent = resultDraft.goalsAgainst; if (autoTag) syncTag(resultTagFromScore()); });
+  document.getElementById("gf-minus").addEventListener("click", () => { resultDraft.goalsFor = Math.max(0, resultDraft.goalsFor - 1); document.getElementById("gf-output").textContent = resultDraft.goalsFor; if (autoTag()) syncTag(resultTagFromScore()); });
+  document.getElementById("gf-plus").addEventListener("click", () => { resultDraft.goalsFor += 1; document.getElementById("gf-output").textContent = resultDraft.goalsFor; if (autoTag()) syncTag(resultTagFromScore()); });
+  document.getElementById("ga-minus").addEventListener("click", () => { resultDraft.goalsAgainst = Math.max(0, resultDraft.goalsAgainst - 1); document.getElementById("ga-output").textContent = resultDraft.goalsAgainst; if (autoTag()) syncTag(resultTagFromScore()); });
+  document.getElementById("ga-plus").addEventListener("click", () => { resultDraft.goalsAgainst += 1; document.getElementById("ga-output").textContent = resultDraft.goalsAgainst; if (autoTag()) syncTag(resultTagFromScore()); });
 
   document.getElementById("result-tag-chips").addEventListener("click", (event) => {
     const chip = event.target.closest(".chip");
     if (!chip) return;
-    autoTag = false;
+    resultDraft.tagLocked = true;
     syncTag(chip.dataset.tag);
   });
 
@@ -1383,10 +1400,13 @@ function renderResultPublishStep() {
     <p class="label" style="margin-top:16px;">Confirmed DOTD</p>
     <div class="chips" id="dotd-winner-chips" style="margin-top:8px;">${winnerChips("dotdPlayerId")}</div>
 
+    ${resultDraft.resultTag === "abandoned" ? `
+    <p class="label" style="padding:14px 0;border-top:1px solid var(--line);margin-top:16px;text-transform:none;letter-spacing:0;">Abandoned games aren't added to personal records.</p>
+    ` : `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-top:1px solid var(--line);margin-top:16px;">
       <span class="sp">Add this to my personal record too</span>
       <span class="toggle" id="add-to-my-record-toggle" role="switch" aria-checked="${resultDraft.addToMyRecord}"></span>
-    </div>
+    </div>`}
 
     <button type="button" id="publish-result-btn" class="btn" style="margin-top:16px;">Publish result</button>
     <p id="publish-status" class="tiny" style="color:var(--muted);margin-top:10px;"></p>
@@ -1421,7 +1441,7 @@ function renderResultPublishStep() {
   wireWinnerChips("motm-winner-chips", "motmPlayerId");
   wireWinnerChips("dotd-winner-chips", "dotdPlayerId");
 
-  document.getElementById("add-to-my-record-toggle").addEventListener("click", (e) => {
+  document.getElementById("add-to-my-record-toggle")?.addEventListener("click", (e) => {
     resultDraft.addToMyRecord = !resultDraft.addToMyRecord;
     e.currentTarget.setAttribute("aria-checked", resultDraft.addToMyRecord ? "true" : "false");
   });
@@ -1446,6 +1466,7 @@ async function publishResult() {
     .update({
       goals_for: resultDraft.goalsFor,
       goals_against: resultDraft.goalsAgainst,
+      result_tag: resultDraft.resultTag || resultTagFromScore(),
       venue: resultDraft.venue,
       kit: resultDraft.kit
     })
@@ -1481,7 +1502,8 @@ async function publishResult() {
     }
   }
 
-  if (resultDraft.addToMyRecord) {
+  // An abandoned game isn't a result, so it doesn't go on anyone's record.
+  if (resultDraft.addToMyRecord && resultDraft.resultTag !== "abandoned") {
     const mine = squad.find(p => p.userId === userId && p.inSquad);
     if (mine) {
       // Check MY records only. This used to query football_details by

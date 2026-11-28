@@ -310,6 +310,8 @@
 }
 .form-pip[data-outcome="W"] { background: var(--sport); color: var(--on-accent); }
 .form-pip[data-outcome="L"] { background: var(--negative); color: var(--on-accent); }
+.form-pip[data-outcome="A"] { background: transparent; border: 1px solid var(--line-strong); color: var(--muted); }
+.fixture-row__tag { display: block; text-align: right; margin-top: 2px; }
 .form-pip[data-outcome="none"] { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
 
 .season-table { width: 100%; border-collapse: collapse; font: var(--t-body); }
